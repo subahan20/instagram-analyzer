@@ -3,6 +3,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import { supabase } from './supabase'
 import Dashboard from './components/Dashboard'
 import InstagramSearch from './components/InstagramSearch'
+import ProfilePage from './components/ProfilePage'
 
 const INITIAL_CATEGORIES = [
   { id: 'Software Development', keywords: ['software', 'developer', 'coding', 'programming', 'tech', 'build', 'dev'] },
@@ -14,7 +15,7 @@ const INITIAL_CATEGORIES = [
   { id: 'Others', keywords: [] },
 ];
 
-function SyncPage({ categories, onAddCategory }) {
+function SyncPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
       <section className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
@@ -36,7 +37,7 @@ function SyncPage({ categories, onAddCategory }) {
           </Link>
         </header>
         
-        <InstagramSearch categories={categories} onAddCategory={onAddCategory} />
+        <InstagramSearch />
       </section>
     </div>
   )
@@ -90,8 +91,9 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<SyncPage categories={categories} onAddCategory={addCategory} />} />
+      <Route path="/" element={<SyncPage />} />
       <Route path="/dashboard" element={<Dashboard sharedCategories={categories} />} />
+      <Route path="/profile/:id" element={<ProfilePage />} />
     </Routes>
   )
 }

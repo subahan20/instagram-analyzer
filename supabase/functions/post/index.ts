@@ -38,10 +38,35 @@ serve(async (req) => {
 
     const supabaseClient = createClient(supabaseUrl, serviceRoleKey)
 
-    // 1. Fetch Instagram Data via Apify
-    // Actor: apify/instagram-scraper
-    // Robust URL/Username handling
+    // 0. Cache Check: If profile already exists, return immediately
     const input = username.trim();
+    const cleanUsername = input.includes('instagram.com/') 
+      ? input.split('instagram.com/')[1].split('/')[0].split('?')[0]
+      : (input.startsWith('@') ? input.substring(1) : input);
+
+    const { data: existingRecords, error: checkError } = await supabaseClient
+      .from('post_insta_data')
+      .select('*')
+      .or(`username.eq."${username}",username.eq."${cleanUsername}"`)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const validCache = existingRecords?.find((r: any) => r.post_data?.status === 'done' || (!r.post_data?.status && r.post_data?.post_data?.length > 0));
+
+    if (!checkError && validCache) {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Profile data retrieved from cache', 
+          success: true,
+          data: validCache,
+          cached: true
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      )
+    }
+
+    // 1. Fetch Instagram Data via Apify (if not in cache)
+    // Robust URL/Username handling
     let reelsUrl = '';
     let targetUsername = '';
 
@@ -53,11 +78,11 @@ serve(async (req) => {
         if (segments[0] === 'reels' || segments[0] === 'p' || segments[0] === 'tv') {
           // It's a specific post link. Use it as-is.
           reelsUrl = input.split('?')[0]; // Strip tracking params
-          targetUsername = segments[1] || 'unknown'; 
+          targetUsername = 'unknown'; 
         } else {
-          // It's a profile link. Force it to the reels tab for better scraping.
+          // It's a profile link.
           targetUsername = segments[0];
-          reelsUrl = `https://www.instagram.com/${targetUsername}/reels/`;
+          reelsUrl = `https://www.instagram.com/${targetUsername}/`;
         }
       } catch (e) {
         reelsUrl = input; // Fallback to raw input
@@ -65,128 +90,140 @@ serve(async (req) => {
       }
     } else {
       targetUsername = input.startsWith('@') ? input.substring(1) : input;
-      reelsUrl = `https://www.instagram.com/${targetUsername}/reels/`;
+      reelsUrl = `https://www.instagram.com/${targetUsername}/`;
     }
 
-    const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`
-    
-    let result: any[] = [];
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          directUrls: [reelsUrl],
-          resultsLimit: 50 // Reduced from 500 to stay within 60s timeout
-        })
-      })
-      
-      if (!res.ok) {
-        const errText = await res.text()
-        throw new Error(`Apify error (${res.status}): ${errText}`)
-      }
-      
-      result = await res.json()
-    } catch (e: any) {
-      throw new Error(`Apify connection failed: ${e.message || 'Unknown error'}`)
-    }
-
-    if (!Array.isArray(result) || result.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          message: 'No data found from Apify', 
-          success: false,
-          debug: {
-            host: 'api.apify.com',
-            resultType: typeof result,
-            resultSize: result?.length
-          }
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
-
-    // Explicit check for Apify scraper errors (e.g. no_items, private data)
-    if (result[0]?.error) {
-      throw new Error(`Apify Scraper Error: ${result[0].errorDescription || result[0].error}`)
-    }
-
-    // 2. Map Apify Data to Dashboard Structure
-    const firstItem = result[0];
-    const profile_id = firstItem.ownerId || firstItem.owner_id || firstItem.id || username;
-    const profile_pic = firstItem.profilePicUrl || firstItem.profile_pic_url || firstItem.profilePic || '';
-    const full_name = firstItem.ownerFullName || firstItem.owner_full_name || firstItem.ownerUsername || '';
-    const follower_count = firstItem.followersCount || firstItem.followers_count || 0;
-    const following_count = firstItem.followsCount || firstItem.follows_count || 0;
-
-    // Standardize post objects for Dashboard compatibility
-    // Filter for Reels and Videos specifically
-    const formattedPosts = result
-      .filter(post => 
-        post.videoUrl || post.displayUrl || post.isVideo === true
-      )
-      .map(post => ({
-        ...post,
-        like_count: post.likesCount ?? post.like_count ?? 0,
-        comment_count: post.commentsCount ?? post.comment_count ?? 0,
-        video_play_count: post.videoPlayCount ?? post.videoViewCount ?? 0,
-        display_url: post.videoUrl ?? post.displayUrl ?? '',
-        shortcode: post.shortCode ?? post.id ?? '',
-        caption: post.caption ?? '',
-        product_type: post.productType || ''
-      }));
-
-    const enriched_data = {
-      profile_metadata: {
-        id: profile_id,
-        username: username,
-        full_name: full_name,
-        profile_picture: profile_pic,
-        follower_count: follower_count,
-        following_count: following_count,
-      },
-      posts: formattedPosts,
-      sync_timestamp: new Date().toISOString(),
-      debug_info: {
-        raw_count: result.length,
-        processed_count: formattedPosts.length,
-        available_keys: Object.keys(firstItem),
-        first_item_sample: {
-          id: firstItem.id,
-          type: firstItem.type,
-          productType: firstItem.productType,
-          videoViewCount: firstItem.videoViewCount
-        }
-      }
-    };
-
-    // 3. Store Enriched Data
-    const { data: insertedData, error: postDbError } = await supabaseClient
+    // 4. Create Syncing Placeholder
+    const { data: placeholder, error: placeholderError } = await supabaseClient
       .from('post_insta_data')
       .insert({
         username: username,
-        post_data: enriched_data,
+        post_data: { 
+          status: 'syncing',
+          profile_data: [],
+          post_data: []
+        },
         category: category
       })
       .select()
+      .single()
 
-    if (postDbError) {
-      throw new Error(`Database Error (posts): ${postDbError.message}`)
+    if (placeholderError) {
+      throw new Error(`Database Error (placeholder): ${placeholderError.message}`)
     }
 
+    const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`
+    const postScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`
+
+    // 5. Trigger Background Scraper
+    // @ts-ignore
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        console.log(`[Background] Starting sync for ${targetUsername} (ID: ${placeholder.id})...`)
+        
+        const [profileResponse, postResponse] = await Promise.all([
+          targetUsername !== 'unknown' 
+            ? fetch(profileScraperUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usernames: [targetUsername] })
+              })
+            : Promise.resolve({ ok: false, json: () => Promise.resolve([]) }),
+          fetch(postScraperUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              directUrls: [reelsUrl], 
+              resultsLimit: 30
+            })
+          })
+        ])
+
+        if (!postResponse.ok) throw new Error(`Posts fetch failed: ${await postResponse.text()}`)
+
+        const [profileResults, result] = await Promise.all([
+          profileResponse.ok ? profileResponse.json() : Promise.resolve([]),
+          postResponse.json()
+        ])
+
+        if (!result || result.length === 0) {
+          throw new Error('No posts found for this URL')
+        }
+
+        const owner = result[0]?.owner;
+        const profileData = profileResults.length > 0 ? {
+          fullName: profileResults[0].fullName || '',
+          followersCount: profileResults[0].followersCount || 0,
+          followsCount: profileResults[0].followsCount || 0,
+          businessCategoryName: profileResults[0].businessCategoryName || '',
+          postsCount: profileResults[0].postsCount || 0,
+          profilePicUrl: profileResults[0].profilePicUrl || '',
+          biography: profileResults[0].biography || '',
+          externalUrl: profileResults[0].externalUrl || ''
+        } : (owner ? {
+          fullName: owner.fullName || owner.full_name || '',
+          followersCount: owner.followersCount || 0,
+          followsCount: owner.followsCount || 0,
+          businessCategoryName: owner.businessCategoryName || '',
+          postsCount: owner.postsCount || 0,
+          profilePicUrl: owner.profilePicUrl || owner.profile_pic_url || '',
+          biography: owner.biography || '',
+          externalUrl: owner.externalUrl || ''
+        } : null);
+
+        const formattedPosts = result
+          .filter((post: any) => post.videoUrl || post.displayUrl || post.isVideo === true)
+          .map((post: any) => {
+            const rawLikes = post.likesCount ?? post.like_count ?? 0;
+            return {
+              ...post,
+              like_count: rawLikes < 0 ? 0 : rawLikes,
+              comment_count: post.commentsCount ?? post.comment_count ?? 0,
+              video_play_count: post.videoPlayCount ?? post.videoViewCount ?? 0,
+              display_url: post.videoUrl ?? post.displayUrl ?? '',
+              shortcode: post.shortCode ?? post.id ?? '',
+              caption: post.caption ?? '',
+            };
+          });
+
+        const final_storage_data = {
+          status: 'done',
+          post_data: formattedPosts,
+          profile_data: profileData ? [profileData] : []
+        };
+
+        const { error: updateError } = await supabaseClient
+          .from('post_insta_data')
+          .update({ post_data: final_storage_data })
+          .eq('id', placeholder.id)
+
+        if (updateError) throw updateError
+        console.log(`[Background] Successfully updated ${targetUsername} (ID: ${placeholder.id})`)
+
+      } catch (err) {
+        console.error(`[Background Error] ${err instanceof Error ? err.message : 'Unknown error'}`)
+        // Update to failed status so UI can handle it
+        await supabaseClient
+          .from('post_insta_data')
+          .update({ post_data: { status: 'error', error: err instanceof Error ? err.message : 'Unknown error' } })
+          .eq('id', placeholder.id)
+      }
+    })())
+
+    // 6. Return placeholder response immediately
     return new Response(
       JSON.stringify({ 
-        message: 'Post data synced successfully via Apify', 
+        message: 'Synchronization started in background', 
         success: true,
-        data: insertedData 
+        data: placeholder,
+        background: true
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 202 }
     )
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    console.error(`[Function Error] ${errorMsg}`)
     return new Response(
       JSON.stringify({ error: errorMsg }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

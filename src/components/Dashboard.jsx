@@ -1,22 +1,28 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import VideoModal from './VideoModal'
 
 const ITEMS_PER_PAGE = 25;
 
 function Dashboard({ sharedCategories }) {
+  const navigate = useNavigate()
   const [data, setData] = useState([])
+  const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('All Categories')
   const [nameSearch, setNameSearch] = useState('')
   const [selectedVideo, setSelectedVideo] = useState(null)
 
-  // Remove "Others" from the dashboard dropdown as requested
+  // Dynamically generate categories from available profile data
   const dashboardCategories = useMemo(() => {
-    return ['All Categories', ...sharedCategories.filter(c => c.id !== 'Others').map(c => c.id)];
-  }, [sharedCategories]);
+    const categories = profiles
+      .map(p => p.businessCategoryName)
+      .filter(Boolean)
+    const uniqueCategories = [...new Set(categories)].sort()
+    return ['All Categories', ...uniqueCategories]
+  }, [profiles]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -35,47 +41,108 @@ function Dashboard({ sharedCategories }) {
     return mapping[dbCategory] || dbCategory || 'Software Development';
   }
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
-      try {
-        const { data: records, error } = await supabase
-          .from('post_insta_data')
-          .select('*')
-          .order('created_at', { ascending: false })
+  const fetchData = async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    try {
+      const { data: records, error } = await supabase
+        .from('post_insta_data')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-        if (error) throw error
+      if (error) throw error
 
-        const allPosts = records.flatMap(record => {
-          const posts = record.post_data.posts || []
-          return posts.map((post, index) => ({
-            id: `${record.id}-${post.id || post.shortcode || index}`, // Ensure global uniqueness across records
+      const allPosts = records.flatMap(record => {
+        const posts = record.post_data?.post_data || record.post_data?.posts || []
+        const isSyncing = record.post_data?.status === 'syncing'
+        const ownerName = record.post_data?.profile_data?.[0]?.fullName || record.username;
+        
+        if (isSyncing) return [];
+        if (!ownerName || ownerName === 'N/A' || ownerName.trim() === '') return [];
+
+        return posts
+          .filter(post => post.videoUrl || post.videoPlayCount || post.videoViewCount || post.isVideo === true)
+          .map((post, index) => ({
+            id: `${record.id}-${post.id || post.shortcode || index}`, 
             username: record.username,
-            ownerFullName: record.post_data?.profile_metadata?.full_name || record.username,
-            profilePic: record.post_data.profile_metadata.profile_picture,
+            ownerFullName: ownerName,
+            profilePic: record.post_data?.profile_data?.[0]?.profilePicUrl || '',
             shortcode: post.shortcode,
             videoUrl: post.videoUrl || `https://www.instagram.com/reels/${post.shortcode}/`,
             plays: post.videoPlayCount || post.videoViewCount || 0,
-            likes: post.like_count || post.likesCount || 0,
+            likes: Math.max(0, post.like_count || post.likesCount || 0),
             comments: post.comment_count || post.commentsCount || 0,
             syncDate: new Date(record.created_at).toLocaleDateString(),
-            category: mapCategory(record.category)
+            category: mapCategory(record.category),
+            businessCategoryName: record.post_data?.profile_data?.[0]?.businessCategoryName || 
+                                  record.post_data?.profile_data?.businessCategoryName || 'N/A'
           }))
-        })
+      })
 
-        const sortedPosts = allPosts.sort((a, b) => {
-          if (b.plays !== a.plays) return b.plays - a.plays;
-          return b.likes - a.likes;
-        })
-        setData(sortedPosts)
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err)
-      } finally {
-        setLoading(false)
-      }
+      const allProfiles = records.flatMap(record => {
+        const isSyncing = record.post_data?.status === 'syncing';
+        const profileData = record.post_data?.profile_data;
+        
+        if (isSyncing) {
+          return [{
+            fullName: 'Gathering Info...',
+            username: record.username,
+            isSyncing: true,
+            recordId: record.id,
+            businessCategoryName: 'Loading...',
+            postsCount: 0,
+            followsCount: 0,
+            followersCount: 0,
+            externalUrl: null
+          }];
+        }
+
+        if (!profileData) return [];
+        const profilesArray = Array.isArray(profileData) ? profileData : [profileData];
+        return profilesArray
+          .filter(profile => profile.fullName && profile.fullName.trim() !== '')
+          .map(profile => ({
+            ...profile,
+            recordId: record.id,
+            isSyncing: false
+          }))
+      })
+
+      const sortedPosts = allPosts.sort((a, b) => {
+        if (b.plays !== a.plays) return b.plays - a.plays;
+        return b.likes - a.likes;
+      })
+      setData(sortedPosts)
+      setProfiles(allProfiles)
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err)
+    } finally {
+      if (showLoading) setLoading(false)
     }
-    fetchData()
-  }, []) // Fetch once on mount
+  }
+
+  useEffect(() => {
+    fetchData(true)
+
+    // Subscribe to real-time changes
+    const channel = supabase
+      .channel('post-insta-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_insta_data' },
+        (payload) => {
+          console.log('Real-time update received:', payload)
+          fetchData(false) // Silent refresh
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status)
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+ // Fetch once on mount
 
   const filteredData = useMemo(() => {
     return data.filter((row) => {
@@ -85,12 +152,27 @@ function Dashboard({ sharedCategories }) {
 
       const categoryMatch =
         selectedCategory && selectedCategory !== "All Categories"
-          ? row.category === selectedCategory
+          ? row.businessCategoryName === selectedCategory
           : true;
 
       return nameMatch && categoryMatch;
     });
   }, [data, selectedCategory, nameSearch]);
+
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter((profile) => {
+      const nameMatch = nameSearch
+        ? (profile.fullName || "").toLowerCase().includes(nameSearch.toLowerCase())
+        : true;
+
+      const categoryMatch =
+        selectedCategory && selectedCategory !== "All Categories"
+          ? profile.businessCategoryName === selectedCategory
+          : true;
+
+      return nameMatch && categoryMatch;
+    });
+  }, [profiles, selectedCategory, nameSearch]);
 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE)
   const paginatedData = useMemo(() => {
@@ -110,6 +192,7 @@ function Dashboard({ sharedCategories }) {
       LOADING ARCHIVES...
     </div>
   )
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
@@ -161,82 +244,108 @@ function Dashboard({ sharedCategories }) {
         </div>
       </header>
 
-        {/* Reel Analytics (Detailed Table) */}
-        <div className="mt-12">
+        {/* Profile Analytics */}
+        <div className="mt-12 mb-16">
           <div className="flex items-center gap-3 mb-6 px-2 sm:px-0">
             <span className="w-8 h-[2px] bg-indigo-500"></span>
-            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Reel Analytics</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Profile Analytics</h2>
           </div>
           
           <div className="bg-slate-900/40 border border-slate-800 rounded-[1.5rem] sm:rounded-[3rem] overflow-hidden shadow-2xl backdrop-blur-xl">
             <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-              <table className="w-full text-left border-collapse min-w-[1000px]">
+              <table className="w-full text-left border-collapse min-w-[1200px]">
                 <thead>
                   <tr className="border-b border-slate-800/50 bg-slate-900/50">
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Sr. No</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Date</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Name</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Category</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Link</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Views</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Likes</th>
-                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Comments</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Sr. No</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Profile Pic</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Name</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Biography</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Posts</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Follows</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Followers</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Category</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Link</th>
+                    <th className="px-6 sm:px-8 py-5 sm:py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/20">
-                  {loading ? (
-                    <tr>
-                      <td colSpan="8" className="px-8 py-24 text-center">
-                        <div className="flex flex-col items-center gap-4">
-                          <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-                          <p className="text-slate-500 font-bold tracking-widest text-xs uppercase animate-pulse">Analyzing Archives...</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : paginatedData.length > 0 ? (
-                    paginatedData.map((item, index) => (
-                      <tr key={item.id} className="hover:bg-slate-800/30 transition-colors group">
+                  {filteredProfiles.length > 0 ? (
+                    filteredProfiles.map((profile, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/30 transition-colors group">
                         <td className="px-6 sm:px-8 py-5 sm:py-6">
-                          <span className="text-slate-500 font-mono text-xs">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</span>
-                        </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6 whitespace-nowrap">
-                          <span className="text-slate-500 font-bold text-xs">{item.syncDate}</span>
+                          <span className="text-slate-500 font-mono text-xs">{idx + 1}</span>
                         </td>
                         <td className="px-6 sm:px-8 py-5 sm:py-6">
-                          <span className="text-white font-bold leading-tight text-[10px] sm:text-xs md:text-sm line-clamp-2">{item.ownerFullName}</span>
+                          {profile.profilePicUrl ? (
+                            <img 
+                              src={`https://images.weserv.nl/?url=${encodeURIComponent(profile.profilePicUrl)}`} 
+                              alt="Profile" 
+                              width="40" 
+                              height="40" 
+                              className="rounded-full object-cover border border-slate-700" 
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : null}
                         </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6 whitespace-nowrap">
-                          <span className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-indigo-400 text-[10px] font-bold uppercase tracking-wider group-hover:border-indigo-500/30 transition-all">
-                            {item.category}
-                          </span>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          {profile.isSyncing ? (
+                            <div className="flex items-center gap-2 text-indigo-400 animate-pulse">
+                              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Syncing...</span>
+                            </div>
+                          ) : (
+                            <span className="text-white font-bold text-xs">{profile.fullName || 'N/A'}</span>
+                          )}
                         </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6 whitespace-nowrap">
+                        <td className="px-6 sm:px-8 py-5 sm:py-6 max-w-[200px]">
+                          <span className="text-slate-400 text-[10px] leading-relaxed line-clamp-3">{profile.biography || 'N/A'}</span>
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          <span className="text-white font-bold text-xs">{profile.postsCount?.toLocaleString() || '0'}</span>
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          <span className="text-white font-bold text-xs">{profile.followsCount?.toLocaleString() || '0'}</span>
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          <span className="text-white font-bold text-xs">{profile.followersCount?.toLocaleString() || '0'}</span>
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          <span className="text-white font-bold text-xs">{profile.businessCategoryName || 'N/A'}</span>
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
+                          {profile.externalUrl ? (
+                            <a 
+                              href={profile.externalUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 font-bold text-[10px] transition-all"
+                              title="External Profile"
+                            >
+                              Link
+                            </a>
+                          ) : (
+                            <span className="text-slate-600 text-[10px] font-mono">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 sm:px-8 py-5 sm:py-6">
                           <button 
-                            onClick={() => setSelectedVideo({ shortcode: item.shortcode, url: item.videoUrl })}
-                            className="text-slate-400 hover:text-indigo-400 font-mono text-xs transition-colors flex items-center gap-1"
+                            onClick={() => navigate(`/profile/${profile.recordId}`)}
+                            disabled={profile.isSyncing}
+                            className={`text-xs font-bold py-2 px-4 rounded-lg transition-all ${
+                              profile.isSyncing 
+                                ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
+                                : 'bg-indigo-500 hover:bg-indigo-600 text-white cursor-pointer'
+                            }`}
                           >
-                            View Reel <span className="text-[10px]">↗</span>
+                            {profile.isSyncing ? 'Waiting...' : 'View'}
                           </button>
-                        </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6">
-                          <span className="text-white font-black text-sm">{item.plays?.toLocaleString()}</span>
-                        </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6">
-                          <span className="text-white font-black text-sm">{item.likes?.toLocaleString()}</span>
-                        </td>
-                        <td className="px-6 sm:px-8 py-5 sm:py-6">
-                          <span className="text-white font-black text-sm">{item.comments?.toLocaleString()}</span>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="8" className="px-8 py-32 text-center text-slate-500">
-                        <div className="flex flex-col items-center gap-4">
-                          <div className="text-4xl grayscale opacity-20">📊</div>
-                          <p className="text-lg font-medium text-white/50 tracking-tight">No data available</p>
-                          <p className="text-sm opacity-60">Adjust your filters or curate more content to see analytics.</p>
-                        </div>
+                      <td colSpan="10" className="px-8 py-16 text-center text-slate-500">
+                        No profile data available.
                       </td>
                     </tr>
                   )}
@@ -245,51 +354,6 @@ function Dashboard({ sharedCategories }) {
             </div>
           </div>
         </div>
-
-        {/* Pagination Bar */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 py-6 bg-slate-900/40 backdrop-blur-2xl border border-slate-800 rounded-3xl">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-xl hover:bg-slate-800 transition-all text-slate-400 disabled:opacity-30 disabled:pointer-events-none group font-bold"
-              title="First Page"
-            >
-              <span className="group-hover:-translate-x-1 transition-transform">«</span>
-            </button>
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-xl hover:bg-slate-800 transition-all text-slate-400 disabled:opacity-30 disabled:pointer-events-none group"
-              title="Previous Page"
-            >
-              <span className="group-hover:-translate-x-1 transition-transform">←</span>
-            </button>
-            
-            <div className="flex items-center gap-2">
-              <div className="bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-xl text-indigo-400 font-black text-sm">
-                {currentPage}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-xl hover:bg-slate-800 transition-all text-slate-400 disabled:opacity-30 disabled:pointer-events-none group"
-              title="Next Page"
-            >
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </button>
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
-              className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-xl hover:bg-slate-800 transition-all text-slate-400 disabled:opacity-30 disabled:pointer-events-none group font-bold"
-              title="Last Page"
-            >
-              <span className="group-hover:translate-x-1 transition-transform">»</span>
-            </button>
-          </div>
-        )}
       </div>
       {selectedVideo && (
         <VideoModal 
@@ -298,9 +362,9 @@ function Dashboard({ sharedCategories }) {
           onClose={() => setSelectedVideo(null)} 
         />
       )}
-      </div>
     </div>
-  )
+  </div>
+)
 }
 
 export default Dashboard

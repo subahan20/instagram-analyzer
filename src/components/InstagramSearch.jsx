@@ -1,22 +1,13 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
-export default function InstagramSearch({ categories, onAddCategory }) {
+export default function InstagramSearch() {
   const [url, setUrl] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(categories[0].id);
-  const [customKeyword, setCustomKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
-  const handleAddCategory = () => {
-    if (!customKeyword.trim()) return;
-    const newCatName = customKeyword.trim();
-    onAddCategory(newCatName);
-    setSelectedCategory(newCatName);
-    setCustomKeyword('');
-  };
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,9 +21,10 @@ export default function InstagramSearch({ categories, onAddCategory }) {
       const { data, error: funcError } = await supabase.functions.invoke('post', {
         body: { 
           username: url.trim(),
-          category: selectedCategory === 'Others' ? customKeyword : selectedCategory
+          category: 'Software Developer' // Default category as it's no longer selectable in UI
         }
       });
+
       if (funcError) {
         console.error('Edge Function Error Object:', funcError);
         let errorDetail = '';
@@ -62,6 +54,9 @@ export default function InstagramSearch({ categories, onAddCategory }) {
 
       setSuccess(true);
       setUrl('');
+      
+      // Redirect to dashboard immediately (sync continues in background if new)
+      navigate('/dashboard');
     } catch (err) {
       console.error('Search failed detailed:', err);
       setError(err.message || 'An unexpected error occurred. Please check the URL and try again.');
@@ -96,19 +91,6 @@ export default function InstagramSearch({ categories, onAddCategory }) {
               <div className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-700 font-mono text-xs hidden sm:block">URL</div>
             </div>
 
-            <div className="w-full lg:w-72 relative group">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/50 text-slate-300 px-5 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-3xl outline-none cursor-pointer appearance-none font-semibold text-sm sm:text-base"
-              >
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.id}</option>
-                ))}
-              </select>
-              <div className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-xs">↓</div>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -124,25 +106,6 @@ export default function InstagramSearch({ categories, onAddCategory }) {
               )}
             </button>
           </div>
-
-          {selectedCategory === 'Others' && (
-            <div className="flex flex-col sm:flex-row gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-              <input
-                type="text"
-                placeholder="Enter custom category name..."
-                value={customKeyword}
-                onChange={(e) => setCustomKeyword(e.target.value)}
-                className="flex-1 bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-white px-5 py-3 rounded-xl outline-none transition-all placeholder:text-slate-600 text-sm font-medium"
-              />
-              <button
-                type="button"
-                onClick={handleAddCategory}
-                className="px-8 py-3 bg-slate-800 hover:bg-slate-700 text-indigo-400 font-bold rounded-xl transition-all border border-slate-700 hover:border-indigo-500/30 text-sm"
-              >
-                Add
-              </button>
-            </div>
-          )}
         </form>
 
         {error && (
