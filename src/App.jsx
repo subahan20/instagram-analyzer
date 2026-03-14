@@ -5,15 +5,7 @@ import Dashboard from './components/Dashboard'
 import InstagramSearch from './components/InstagramSearch'
 import ProfilePage from './components/ProfilePage'
 
-const INITIAL_CATEGORIES = [
-  { id: 'Software Development', keywords: ['software', 'developer', 'coding', 'programming', 'tech', 'build', 'dev'] },
-  { id: 'Frontend Development', keywords: ['react', 'css', 'ui', 'ux', 'javascript', 'js', 'html', 'tailwind', 'nextjs', 'frontend'] },
-  { id: 'Backend Development', keywords: ['backend', 'api', 'database', 'sql', 'node', 'express', 'python', 'server', 'microservices'] },
-  { id: 'DevOps', keywords: ['devops', 'docker', 'kubernetes', 'cicd', 'jenkins', 'terraform', 'automation'] },
-  { id: 'AI Tools', keywords: ['ai', 'intelligence', 'automation', 'openai', 'gemini', 'anthropic', 'agents', 'llm', 'gpt', 'llama', 'langchain'] },
-  { id: 'LLMs', keywords: ['llm', 'gpt', 'llama', 'langchain', 'ai tools'] },
-  { id: 'Others', keywords: [] },
-];
+// Removed unused INITIAL_CATEGORIES array
 
 function SyncPage() {
   return (
@@ -38,61 +30,40 @@ function SyncPage() {
         </header>
         
         <InstagramSearch />
+
+        <div className="mt-20 flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="max-w-2xl">
+            <h2 className="text-4xl sm:text-5xl font-black text-white mb-6">
+              Discover Next-Gen <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Creators</span>
+            </h2>
+            <p className="text-slate-400 text-lg sm:text-xl font-medium leading-relaxed">
+              Unlock deep performance insights, growth metrics, and engagement analytics for thousands of creators.
+            </p>
+          </div>
+          
+          <Link 
+            to="/dashboard"
+            className="group relative px-10 py-5 bg-indigo-500 hover:bg-indigo-600 rounded-2xl font-black text-lg sm:text-xl tracking-widest uppercase transition-all shadow-[0_0_40px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_0_60px_-10px_rgba(99,102,241,0.6)] active:scale-95 overflow-hidden"
+          >
+            <span className="relative z-10 flex items-center gap-4">
+              Start Instagram Dashboard
+              <span className="group-hover:translate-x-2 transition-transform duration-300">→</span>
+            </span>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1s_infinite] skew-x-12"></div>
+          </Link>
+        </div>
       </section>
     </div>
   )
 }
 
 function App() {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-
-  useEffect(() => {
-    const fetchCustomIndustries = async () => {
-      const { data, error } = await supabase
-        .from('custom_industries')
-        .select('name')
-        .order('created_at', { ascending: true });
-      
-      if (!error && data) {
-        setCategories(prev => {
-          const othersIdx = prev.findIndex(c => c.id === 'Others');
-          const base = prev.slice(0, othersIdx);
-          const others = prev.slice(othersIdx);
-          
-          const stored = data.map(d => ({ id: d.name, keywords: [d.name.toLowerCase()] }));
-          // Filter out duplicates from initial list
-          const filteredStored = stored.filter(s => !base.find(b => b.id === s.id));
-          
-          return [...base, ...filteredStored, ...others];
-        });
-      }
-    };
-    fetchCustomIndustries();
-  }, []);
-
-  const addCategory = async (name) => {
-    if (!name || categories.find(c => c.id === name)) return;
-    
-    // Attempt persist to Supabase
-    const { error } = await supabase
-      .from('custom_industries')
-      .insert([{ name: name.trim() }]);
-    
-    if (error && error.code !== '23505') { // Ignore unique constraint errors
-      console.error('Error saving custom industry:', error);
-    }
-
-    const newCat = { id: name.trim(), keywords: [name.trim().toLowerCase()] };
-    const othersIdx = categories.findIndex(c => c.id === 'Others');
-    const newCategories = [...categories];
-    newCategories.splice(othersIdx, 0, newCat);
-    setCategories(newCategories);
-  };
+  // Removed unused custom_industries fetching and state
 
   return (
     <Routes>
       <Route path="/" element={<SyncPage />} />
-      <Route path="/dashboard" element={<Dashboard sharedCategories={categories} />} />
+      <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile/:id" element={<ProfilePage />} />
     </Routes>
   )
