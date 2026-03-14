@@ -1,55 +1,31 @@
-// api/init.js
-
-let isRunning = false;
-
 export default async function handler(req, res) {
+
   try {
 
-    // Allow only POST requests
-    if (req.method !== "POST") {
-      return res.status(405).json({
-        success: false,
-        message: "Only POST requests are allowed"
-      });
-    }
+    const response = await fetch("https://localhost:5678/webhook/init", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: "init trigger"
+      })
+    });
 
-    // Prevent multiple executions
-    if (isRunning) {
-      return res.status(429).json({
-        success: false,
-        message: "Init function already running"
-      });
-    }
+    const data = await response.text();
 
-    // Lock execution
-    isRunning = true;
-
-
-    // ---- Your main logic here ----
-    // Example: fetch Instagram data or run automation
-    const result = {
-      message: "Init function executed successfully",
-      time: new Date()
-    };
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      data: result
+      data
     });
 
   } catch (error) {
 
-    console.error("Error:", error);
-
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: error.message
     });
 
-  } finally {
-
-    // Always release lock
-    isRunning = false;
-
   }
+
 }
