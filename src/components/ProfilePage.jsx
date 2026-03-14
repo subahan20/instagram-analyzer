@@ -51,7 +51,6 @@ function ProfilePage() {
     const debouncedFetch = () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
-        console.log('Debounced fetch triggered...');
         fetchProfileData(false);
       }, 2000);
     };

@@ -19,7 +19,6 @@ function Dashboard() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      console.log('🔄 Manual Sync Triggered...');
       const { data, error } = await supabase.functions.invoke('refresh-instagram-data', {
         headers: {
           'Cache-Control': 'no-cache',
@@ -28,7 +27,6 @@ function Dashboard() {
       });
 
       if (error) throw error;
-      console.log('✅ Sync Success:', data);
       setRefreshKey(prev => prev + 1);
     } catch (err) {
       console.error('❌ Sync Failed:', err);

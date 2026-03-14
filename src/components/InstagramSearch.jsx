@@ -60,7 +60,6 @@ export default function InstagramSearch() {
       const n8nWebhookUrl = 'http://localhost:5678/webhook/5d95366a-c416-4136-bfa6-9ed2dfbdca3e'; // REPLACE THIS WITH YOUR WEBHOOK!
       
       try {
-        console.log("Triggering n8n background scraper webhook...");
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

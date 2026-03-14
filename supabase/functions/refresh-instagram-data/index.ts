@@ -8,7 +8,6 @@ const corsHeaders = {
 
 // --- REFACTOR: Main Initialization Function ---
 async function init(supabase: any, apifyToken: string) {
-  console.log('[Init] Starting Instagram refresh process...')
   
   // 1. Fetch all influencers
   const { data: influencers, error: influencerError } = await supabase
@@ -21,7 +20,6 @@ async function init(supabase: any, apifyToken: string) {
   }
   
   if (!influencers || influencers.length === 0) {
-    console.log('[Init] No influencers found to refresh.')
     return { success: true, message: 'No influencers to refresh' }
   }
 
@@ -31,13 +29,10 @@ async function init(supabase: any, apifyToken: string) {
     { id: inf.id, username: inf.username, profile_url: inf.profile_url, current_views: inf.views || 0 }
   ]));
 
-  console.log(`[Init] Refreshing ${usernames.length} influencers: ${usernames.join(', ')}`)
-
   // 2. Call Apify Scrapers
   
   // A. Profile Scraper (Batch) - for followers, following, posts
   const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`
-  console.log('[Init] Calling Apify Profile Scraper...')
   
   const pResponse = await fetch(profileScraperUrl, {
     method: 'POST',
@@ -47,7 +42,6 @@ async function init(supabase: any, apifyToken: string) {
 
   // B. Reels Scraper (Batch) - for LIVE views
   const reelsScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`
-  console.log('[Init] Calling Apify Reels Scraper for live metrics...')
   
   const rResponse = await fetch(reelsScraperUrl, {
     method: 'POST',
@@ -63,8 +57,6 @@ async function init(supabase: any, apifyToken: string) {
   
   const profileResults = await pResponse.json()
   const reelsResults = await rResponse.json()
-  console.log(`[Init] Apify returned ${profileResults.length} profiles and ${reelsResults.length} reels.`)
-
   const parseNum = (val: any) => {
     if (typeof val === 'number') return val;
     if (typeof val !== 'string') return 0;
@@ -270,32 +262,23 @@ async function init(supabase: any, apifyToken: string) {
     }
   }
 
-  // 4. Database Updates
-  console.log(`[Init] Updating ${influencerUpdates.length} influencers...`)
   if (influencerUpdates.length > 0) {
     const { error: infError } = await supabase.from('influencers').upsert(influencerUpdates)
     if (infError) throw infError
   }
-
-  console.log(`[Init] Inserting ${metricsHistoryEntries.length} history entries...`)
   if (metricsHistoryEntries.length > 0) {
     const { error: histError } = await supabase.from('metrics_history').insert(metricsHistoryEntries)
     if (histError) throw histError
   }
-
-  console.log(`[Init] Upserting ${reelsToUpsert.length} reels...`)
   if (reelsToUpsert.length > 0) {
     const { error: reelError } = await supabase.from('reels').upsert(reelsToUpsert, { onConflict: 'reel_url' })
     if (reelError) throw reelError
   }
 
   if (reelsToDelete.length > 0) {
-    console.log(`[Init] Deleting ${reelsToDelete.length} missing reels...`)
     const { error: delError } = await supabase.from('reels').delete().in('reel_url', reelsToDelete)
     if (delError) console.error('[Init] Reel deletion error:', delError)
   }
-
-  console.log('[Init] Refresh complete!')
   return { 
     success: true, 
     influencers_updated: influencerUpdates.length,
@@ -305,7 +288,6 @@ async function init(supabase: any, apifyToken: string) {
 }
 
 serve(async (req) => {
-  console.log(`[Refresh Function] Request received: ${req.method}`)
   
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })

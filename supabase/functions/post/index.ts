@@ -19,9 +19,6 @@ serve(async (req) => {
       body = {};
     }
 
-    console.log('[Post Function] Action:', body.action);
-    console.log('[Post Function] Body keys:', Object.keys(body));
-
     const {
       action,
       username: rawUsername,
@@ -200,8 +197,6 @@ serve(async (req) => {
         targetUsername = input.startsWith('@') ? input.substring(1) : input;
       }
       if (targetUsername === 'unknown') throw new Error('Could not extract username from URL');
-
-      console.log(`[Profile Scraper] Fetching Profile & Reels for: ${targetUsername}`);
 
       const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
       const reelsScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`;

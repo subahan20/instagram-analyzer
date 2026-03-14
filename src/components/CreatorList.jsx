@@ -89,7 +89,6 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch }) {
     const debouncedFetch = () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
-        console.log('Debounced fetch triggered from influencers update...');
         fetchCreators(false, true);
       }, 3000);
     };

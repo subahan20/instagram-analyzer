@@ -7,7 +7,6 @@ const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function cleanup() {
-  console.log('Deleting profiles where username is null...');
   const { data, error, count } = await supabase
     .from('profiles')
     .delete({ count: 'exact' })

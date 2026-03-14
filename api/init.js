@@ -24,7 +24,6 @@ export default async function handler(req, res) {
     // Lock execution
     isRunning = true;
 
-    console.log("Init function started");
 
     // ---- Your main logic here ----
     // Example: fetch Instagram data or run automation
@@ -32,8 +31,6 @@ export default async function handler(req, res) {
       message: "Init function executed successfully",
       time: new Date()
     };
-
-    console.log("Init function finished");
 
     return res.status(200).json({
       success: true,
