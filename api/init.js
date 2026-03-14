@@ -2,7 +2,7 @@ export default async function handler(req, res) {
 
   try {
 
-    const response = await fetch("https://localhost:5678/webhook/init", {
+    const response = await fetch("https://charley-unsprouted-seriously.ngrok-free.dev/webhook/init", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
