@@ -37,16 +37,12 @@ function ProfilePage() {
     }
   }
 
-  // Restored automatic fetch on mount to provide seamless experience.
   useEffect(() => {
     fetchProfileData();
   }, [id]);
 
   const debounceTimer = useRef(null);
 
-  // Real-time subscription for profile changes
-  // Removed automatic fetch on mount to guarantee 0 API calls on refresh.
-  // Data will load when the user selects a category, subcategory, or types a search.
   useEffect(() => {
     const debouncedFetch = () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -110,116 +106,131 @@ function ProfilePage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 bg-indigo-500/5 blur-[120px] rounded-full animate-pulse"></div>
-      <div className="relative z-10 flex flex-col items-center gap-6">
-        <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_30px_-5px_rgba(99,102,241,0.5)]"></div>
-        <div className="text-indigo-400 font-black text-2xl tracking-[0.3em] uppercase animate-pulse">
-          Analyzing Profile...
-        </div>
+      <div className="w-16 h-16 border-4 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin shadow-2xl"></div>
+      <div className="mt-6 text-indigo-400 font-bold tracking-[0.3em] uppercase animate-pulse text-xs">
+        Analyzing Intelligence...
       </div>
     </div>
   )
 
-  // Only show "NOT FOUND" if we have attempted to load and failed
   if (!influencer && data !== null) return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-4">
-      <p className="text-xl font-bold">PROFILE NOT FOUND</p>
-      <Link to="/dashboard" className="text-indigo-400 hover:underline">Back to Dashboard</Link>
+    <div className="min-h-screen flex flex-col items-center justify-center text-slate-400 gap-4">
+      <div className="text-6xl mb-4">🔍</div>
+      <p className="text-xl font-bold text-white">Profile not found</p>
+      <Link to="/dashboard" className="px-6 py-2 bg-slate-900 border border-white/10 rounded-xl hover:text-indigo-400 transition-all">Back to Dashboard</Link>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-10 lg:px-16 py-6 sm:py-16">
-        <div className="bg-slate-900/40 border border-slate-800 rounded-[2.5rem] sm:rounded-[4rem] p-6 sm:p-12 lg:p-20 shadow-2xl backdrop-blur-xl relative overflow-hidden group">
-          {/* Decorative background blurs for premium feel */}
-          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 blur-[150px] -mr-64 -mt-64 rounded-full pointer-events-none group-hover:bg-indigo-500/15 transition-all duration-1000"></div>
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-500/10 blur-[120px] -ml-40 -mb-40 rounded-full pointer-events-none group-hover:bg-violet-500/15 transition-all duration-1000"></div>
-          
-          <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-10 mb-16 sm:mb-24 relative z-10">
-            <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12 text-center md:text-left">
-              <Link 
-                to="/dashboard" 
-                className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-2xl hover:border-indigo-400 hover:bg-slate-900 transition-all group shadow-xl"
-              >
-                <span className="text-slate-500 group-hover:text-indigo-400 font-black text-lg block">←</span>
-              </Link>
+    <div className="relative min-h-screen bg-slate-950">
+      {/* Premium AI SaaS Background */}
+      <div 
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{ 
+          backgroundImage: `url('/home-background.png')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.5
+        }}
+      >
+        <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px]"></div>
+      </div>
 
-              {influencer && (
-                <div className="flex flex-col md:flex-row items-center gap-8">
-                  <div className="relative group shrink-0">
-                    <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 via-violet-500 to-indigo-500 rounded-full blur-[10px] opacity-20 group-hover:opacity-40 transition duration-700 animate-pulse"></div>
-                    {influencer.profile_pic ? (
-                      <img 
-                        src={`https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=300&h=300&fit=cover&mask=circle`} 
-                        alt={influencer.username}
-                        className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border-4 border-slate-900 shadow-2xl"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-slate-800 border-4 border-slate-900 flex items-center justify-center text-4xl sm:text-5xl font-black text-slate-500">
-                        {influencer.username?.[0]?.toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tighter break-all">{influencer.username}</h1>
-                    <p className="text-indigo-400 font-mono text-xs sm:text-sm tracking-[0.4em] uppercase font-black opacity-90 px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20 w-fit mx-auto md:mx-0">
-                      {influencer.business_category || 'CREATOR'}
-                    </p>
-                  </div>
+      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-12">
+        <div className="mb-12">
+          <Link 
+            to="/dashboard" 
+            className="inline-flex items-center gap-2 group text-slate-500 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span className="font-bold text-sm tracking-wider uppercase">Dashboard</span>
+          </Link>
+        </div>
+
+        {influencer && (
+          <div className="glass rounded-[3rem] p-8 md:p-12 mb-16 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/5 blur-[100px] -mr-48 -mt-48 rounded-full pointer-events-none group-hover:bg-indigo-500/10 transition-all duration-1000"></div>
+            
+            <div className="relative z-10 flex flex-col lg:flex-row items-center lg:items-end justify-between gap-12">
+              <div className="flex flex-col md:flex-row items-center md:items-end gap-8 text-center md:text-left">
+                <div className="relative group/avatar shrink-0">
+                  <div className="absolute -inset-2 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-full blur-[8px] opacity-20 group-hover/avatar:opacity-40 transition duration-700"></div>
+                  {influencer.profile_pic ? (
+                    <img 
+                      src={`https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=300&h=300&fit=cover&mask=circle`} 
+                      alt={influencer.username}
+                      className="relative w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-slate-900 shadow-2xl"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full bg-slate-900 border-4 border-slate-900 flex items-center justify-center text-5xl font-bold text-slate-700">
+                      {influencer.username?.[0]?.toUpperCase()}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+                <div className="space-y-4">
+                  <div className="inline-flex items-center px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-[10px] font-bold tracking-widest uppercase mb-2">
+                    {influencer.business_category || 'CREATOR'}
+                  </div>
+                  <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight break-all">@{influencer.username}</h1>
+                  <p className="text-slate-400 text-sm md:text-base max-w-xl font-medium leading-relaxed italic">
+                    {influencer.biography || 'No biography available.'}
+                  </p>
+                </div>
+              </div>
 
-            {influencer && (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 w-full xl:w-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 w-full lg:w-auto">
                 {[
                   { label: 'Followers', value: influencer.followers },
                   { label: 'Following', value: influencer.following },
                   { label: 'Posts', value: influencer.posts }
                 ].map((stat, i) => (
-                  <div key={i} className="bg-slate-950/40 border border-slate-800/40 p-4 rounded-3xl text-center backdrop-blur-xl hover:border-indigo-500/40 hover:bg-slate-900/60 transition-all shadow-xl">
-                    <div className="text-xl lg:text-2xl font-black text-white tracking-tighter">{stat.value?.toLocaleString() || '0'}</div>
-                    <div className="text-[9px] text-slate-500 uppercase tracking-[0.2em] mt-1 font-black opacity-80">{stat.label}</div>
+                  <div key={i} className="glass px-6 py-5 rounded-3xl text-center hover:bg-white/5 transition-colors border-white/5 shadow-xl min-w-[120px]">
+                    <div className="text-xl md:text-2xl font-bold text-white tracking-tight">{stat.value?.toLocaleString() || '0'}</div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-widest mt-1 font-bold">{stat.label}</div>
                   </div>
                 ))}
               </div>
-            )}
-          </header>
-
-          <div className="space-y-16 sm:space-y-28 relative z-10">
-            {/* Recent Reels Section */}
-            {reels.length > 0 && (
-              <section>
-                <div className="flex items-center gap-4 mb-10 sm:mb-14">
-                  <span className="w-16 h-[3px] bg-gradient-to-r from-indigo-500 to-transparent rounded-full"></span>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tighter uppercase italic">Recent <span className="text-indigo-400">Reels</span></h2>
-                </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-8">
-                  {reels.slice(0, 20).map((reel, idx) => (
-                    <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Viral Reels Section */}
-            {viralReels.length > 0 && (
-              <section>
-                <div className="flex items-center gap-3 mb-8 px-2">
-                  <span className="w-8 h-[2px] bg-indigo-500"></span>
-                  <h2 className="text-2xl font-black text-white tracking-tight uppercase">Top Performance</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                  {viralReels.map((reel, idx) => (
-                    <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} />
-                  ))}
-                </div>
-              </section>
-            )}
+            </div>
           </div>
+        )}
+
+        <div className="space-y-24">
+          {/* Viral Reels Section */}
+          {viralReels.length > 0 && (
+            <section>
+              <div className="flex items-center gap-3 mb-10 px-2">
+                <div className="w-1.5 h-6 bg-rose-500 rounded-full"></div>
+                <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Viral <span className="text-rose-400">Hits</span></h2>
+                <span className="ml-2 px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-full text-[9px] font-bold text-rose-400 uppercase tracking-widest">Efficiency &gt; 100%</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 sm:gap-8">
+                {viralReels.map((reel, idx) => (
+                  <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} isViral={true} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Recent Reels Section */}
+          {reels.length > 0 && (
+            <section>
+              <div className="flex items-center gap-3 mb-10 px-2">
+                <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>
+                <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Recent <span className="text-indigo-400">Reels</span></h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 sm:gap-8">
+                {reels.slice(0, 20).map((reel, idx) => (
+                  <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
 
@@ -233,23 +244,26 @@ function ProfilePage() {
   )
 }
 
-function VideoCard({ video, onClick }) {
+function VideoCard({ video, onClick, isViral = false }) {
   return (
     <div
       onClick={onClick}
-      className="group bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden hover:border-indigo-500/50 transition-all duration-300 cursor-pointer shadow-xl"
+      className="group relative bg-slate-900 border border-white/5 rounded-[2rem] overflow-hidden hover:border-indigo-500/30 transition-all duration-300 cursor-pointer shadow-2xl"
     >
-      <div className="aspect-[9/16] relative bg-slate-900 flex items-center justify-center overflow-hidden">
-        {/* Top Overlays: Reel Badge + Caption */}
-        <div className="absolute top-4 left-4 right-4 z-20 flex flex-col gap-3">
-          <div className="flex items-center gap-1.5 w-fit bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
-            <span className="text-xs text-white">▶</span>
-            <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase opacity-90">Reel</span>
+      <div className="aspect-[9/16] relative bg-slate-950 flex items-center justify-center overflow-hidden">
+        {/* Top Badges */}
+        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+          {isViral && (
+             <div className="bg-rose-500 text-white text-[8px] font-black tracking-widest uppercase px-3 py-1 rounded-full shadow-lg">
+               🔥 Viral
+             </div>
+          )}
+          <div className="bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-[8px] font-bold text-white/80 uppercase tracking-widest">
+            {video.videoPlayCount?.toLocaleString() || '0'} Views
           </div>
-          
         </div>
 
-        {/* Video Preview / Thumbnail */}
+        {/* Video / Image */}
         {video.video_url ? (
           <video 
             src={video.video_url} 
@@ -261,33 +275,27 @@ function VideoCard({ video, onClick }) {
               e.currentTarget.pause();
               e.currentTarget.currentTime = 0;
             }}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
           />
         ) : video.display_url ? (
           <img 
             src={video.display_url} 
             alt={video.caption || 'Reel thumbnail'} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-slate-900 to-indigo-950/30 flex items-center justify-center">
-            <span className="text-5xl text-indigo-500/40">▶</span>
+          <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+            <span className="text-4xl text-slate-800">▶</span>
           </div>
         )}
 
-        {/* Global Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-black/20 opacity-90"></div>
+        {/* Bottom Metrics Gradient */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-80"></div>
 
-        {/* Metrics Overlay */}
-        <div className="absolute bottom-6 left-4 right-4 flex justify-between z-10">
-          <div className="flex items-center gap-2 bg-black/80 backdrop-blur-md px-3 py-2 rounded-xl border border-white/5 shadow-lg">
-            <span className="text-base text-white">👁</span>
-            <span className="text-sm font-black text-white">{(video.views || 0).toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-2 bg-black/80 backdrop-blur-md px-3 py-2 rounded-xl border border-white/5 shadow-lg">
-            <span className="text-base text-pink-500">❤</span>
-            <span className="text-sm font-black text-white">{(video.likes || 0).toLocaleString()}</span>
-          </div>
+        {/* Dynamic Likes Badge - Always Visible */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 transition-all whitespace-nowrap z-20">
+          <span className="text-rose-500 text-sm">❤️</span>
+          <span className="text-white text-xs font-bold">{(video.likes || 0).toLocaleString()}</span>
         </div>
       </div>
     </div>

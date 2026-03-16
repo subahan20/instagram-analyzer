@@ -16,12 +16,11 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch }) {
   const [creators, setCreators] = useState(hasCache ? globalCreatorsCache : []);
   const [counts, setCounts] = useState(hasCache ? globalCreatorsCounts : { total: 0, filtered: 0 });
   const [loading, setLoading] = useState(!hasCache);
-  const abortControllerRef = useRef(null);
+  const debounceTimer = useRef(null);
 
   const fetchCreators = async (showLoading = true, forceRefresh = false) => {
     const currentKey = `${categoryId}-${subcategoryId}-${nameSearch}`;
     
-    // Use cache if available and not forcing refresh
     if (!forceRefresh && showLoading && currentKey === lastFetchKey && globalCreatorsCache) {
       setCreators(globalCreatorsCache);
       setCounts(globalCreatorsCounts);
@@ -34,7 +33,6 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch }) {
 
     if (showLoading) setLoading(true)
     try {
-      // Fetch profiles via Edge Function dispatcher
       const { data, error } = await supabase.functions.invoke('post', {
         headers: {
           'Cache-Control': 'no-cache',
@@ -68,23 +66,9 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch }) {
   }
 
   useEffect(() => {
-    let isMounted = true;
-    
-    const runFetch = async () => {
-      await fetchCreators();
-    };
-
-    runFetch();
-
-    return () => {
-      isMounted = false;
-    };
+    fetchCreators();
   }, [categoryId, subcategoryId, nameSearch]);
 
-  const debounceTimer = useRef(null);
-
-  // Real-time subscription ONLY for influencers table to avoid spam
-  // Reels and Metrics will be updated visually by the 60s auto-refresh interval in Dashboard.jsx
   useEffect(() => {
     const debouncedFetch = () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -114,136 +98,128 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch }) {
   }, [categoryId, subcategoryId, nameSearch]);
 
   if (loading) return (
-    <div className="py-32 flex flex-col items-center justify-center bg-slate-900/40 border border-slate-800 rounded-[3rem] relative overflow-hidden backdrop-blur-xl">
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent animate-pulse"></div>
-      <div className="w-16 h-16 border-4 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin mb-6 shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]"></div>
-      <div className="text-slate-400 font-bold uppercase tracking-[0.2em] text-sm animate-pulse">
-        Fetching Intelligence...
+    <div className="py-32 flex flex-col items-center justify-center glass rounded-[2rem] relative overflow-hidden">
+      <div className="absolute inset-0 bg-indigo-500/5 animate-pulse"></div>
+      <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-6"></div>
+      <div className="text-slate-400 font-bold uppercase tracking-widest text-[10px] animate-pulse">
+        Gathering Intelligence...
       </div>
     </div>
   )
 
   if (creators.length === 0) return (
-    <div className="py-20 text-center bg-slate-900/40 border border-slate-800 rounded-3xl">
-      <p className="text-slate-500 font-medium italic">
+    <div className="py-20 text-center glass rounded-3xl">
+      <p className="text-slate-500 font-medium italic mb-4">
         {counts.total > 0 
           ? `No profiles match this filter. (Total in database: ${counts.total})`
-          : "No profiles found in the database. Please sync a profile from the Search page!"}
+          : "Discover your first creator to begin."}
       </p>
-      {counts.total > 0 && (
-        <button 
-          onClick={() => navigate('/')}
-          className="mt-4 text-indigo-400 hover:text-indigo-300 text-xs font-bold uppercase tracking-widest"
-        >
-          + Sync New Profile
-        </button>
-      )}
+      <button 
+        onClick={() => navigate('/')}
+        className="text-indigo-400 hover:text-indigo-300 text-xs font-bold uppercase tracking-widest border border-indigo-500/20 px-6 py-3 rounded-xl hover:bg-indigo-500/5 transition-all"
+      >
+        + Sync New Profile
+      </button>
     </div>
   )
 
   return (
-    <div className="mt-12 mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center gap-3 mb-8 px-2 sm:px-0">
-        <span className="w-12 h-[2px] bg-gradient-to-r from-indigo-500 to-transparent"></span>
-        <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight uppercase">
-          Creator <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Discovery</span>
-        </h2>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-3">
+          <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>
+          <h2 className="text-xl font-bold text-white tracking-tight uppercase">
+            Top <span className="text-gradient">Creators</span>
+          </h2>
+        </div>
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900 border border-white/5 px-3 py-1 rounded-full">
+          {creators.length} Result{creators.length !== 1 ? 's' : ''}
+        </div>
       </div>
 
-      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl sm:rounded-[3rem] overflow-hidden shadow-2xl backdrop-blur-xl">
-        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+      <div className="glass rounded-[2rem] overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
-              <tr className="border-b border-slate-800/50 bg-slate-900/50">
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] text-center">Sr. No</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Profile</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Followers</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em]">Growth</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] text-center">Likes</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] text-center">Views</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] text-center">Last Sync</th>
-                <th className="px-6 sm:px-8 py-6 text-slate-500 font-extrabold text-[10px] uppercase tracking-[0.2em] text-right">Action</th>
+              <tr className="border-b border-white/5 bg-white/2">
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest">Profile</th>
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest">Followers</th>
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest text-center">Likes Avg.</th>
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest text-center">Views Avg.</th>
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest text-center">Last Sync</th>
+                <th className="px-8 py-5 text-slate-500 font-bold text-[10px] uppercase tracking-widest text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/20">
-              {creators.map((influencer, idx) => {
+            <tbody className="divide-y divide-white/2">
+              {creators.map((influencer) => {
                 const metrics = influencer.latest_metrics || {};
-                const engagementRate = metrics.followers > 0 
-                  ? ((metrics.likes + metrics.comments) / metrics.followers * 100).toFixed(2) 
-                  : '0.00';
-
                 return (
-                  <tr key={influencer.id} className="hover:bg-slate-800/30 transition-colors group">
-                    <td className="px-6 sm:px-8 py-5 sm:py-6">
-                      <span className="text-slate-500 font-mono text-xs">{idx + 1}</span>
-                    </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6">
+                  <tr key={influencer.id} className="hover:bg-white/5 transition-colors group">
+                    <td className="px-8 py-4">
                       <div className="flex items-center gap-4">
-                        <div className="relative shrink-0">
+                        <div className="relative group/avatar">
+                          <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-full blur-[4px] opacity-0 group-hover/avatar:opacity-20 transition-opacity"></div>
                           {influencer.profile_pic ? (
                             <img 
                               src={`https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=100&h=100&fit=cover&mask=circle`} 
                               alt={influencer.username}
-                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-800 group-hover:border-indigo-500/50 transition-all shadow-xl"
+                              className="relative w-12 h-12 rounded-full object-cover border border-white/10 group-hover:border-indigo-500/50 transition-colors shadow-lg"
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-slate-500 font-bold">
+                            <div className="relative w-12 h-12 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center text-slate-500 font-bold text-lg">
                               {influencer.username?.[0]?.toUpperCase()}
                             </div>
                           )}
                         </div>
                         <div>
-                          <div className="text-white font-bold text-xs sm:text-sm md:text-base group-hover:text-indigo-400 transition-colors">@{influencer.username}</div>
-                          <div className="text-slate-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider">{influencer.business_category || 'Creator'}</div>
+                          <div className="text-slate-100 font-bold group-hover:text-indigo-400 transition-colors">@{influencer.username}</div>
+                          <div className="text-slate-500 text-[9px] font-bold uppercase tracking-widest mt-0.5">{influencer.business_category || 'Creator'}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6">
-                      <div className="text-white font-black text-xs sm:text-base md:text-lg tracking-tight">
+                    <td className="px-8 py-4">
+                      <div className="text-slate-200 font-bold text-base tracking-tight">
                         {metrics.followers?.toLocaleString() || '0'}
                       </div>
-                      <div className="text-slate-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest mt-0.5">TOTAL</div>
-                    </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6">
-                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[8px] sm:text-[10px] font-black tracking-widest uppercase ${
-                        influencer.growth >= 0 
-                          ? 'bg-emerald-500/10 text-emerald-400' 
-                          : 'bg-rose-500/10 text-rose-400'
+                      <div className={`mt-1 inline-flex items-center gap-1 text-[9px] font-bold tracking-widest uppercase ${
+                        influencer.growth >= 0 ? 'text-emerald-500' : 'text-rose-500'
                       }`}>
-                        <span>{influencer.growth >= 0 ? '↑' : '↓'} {Math.abs(influencer.growth)}%</span>
+                        {influencer.growth >= 0 ? '↑' : '↓'} {Math.abs(influencer.growth)}%
                       </div>
                     </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6 text-center">
-                      <div className="text-white font-black text-xs sm:text-base md:text-lg tracking-tight">
+                    <td className="px-8 py-4 text-center">
+                      <div className="text-slate-200 font-bold text-base tracking-tight">
                         {metrics.likes?.toLocaleString() || '0'}
                       </div>
-                      <div className="text-slate-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest mt-0.5">LIKES</div>
+                      <div className="text-slate-600 text-[9px] font-bold uppercase tracking-widest mt-1">TOTAL AVG</div>
                     </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6 text-center">
-                      <div className="text-white font-black text-xs sm:text-base md:text-lg tracking-tight">
+                    <td className="px-8 py-4 text-center">
+                      <div className="text-slate-200 font-bold text-base tracking-tight">
                         {metrics.views?.toLocaleString() || '0'}
                       </div>
-                      <div className="text-slate-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest mt-0.5">VIEWS</div>
+                      <div className="text-slate-600 text-[9px] font-bold uppercase tracking-widest mt-1">TOTAL AVG</div>
                     </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6 text-center">
-                      <div className="text-white font-black text-xs sm:text-base md:text-lg tracking-tight">
+                    <td className="px-8 py-4 text-center">
+                      <div className="text-slate-300 font-semibold text-xs">
                         {influencer.last_synced_at 
                           ? new Date(influencer.last_synced_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          : 'Never'}
+                          : 'Pending'}
                       </div>
-                      <div className="text-slate-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                      <div className="text-slate-600 text-[9px] font-bold uppercase tracking-widest mt-1">
                         {influencer.last_synced_at 
                           ? new Date(influencer.last_synced_at).toLocaleDateString([], { month: 'short', day: 'numeric' })
-                          : 'SYNC REQ'}
+                          : 'Request'}
                       </div>
                     </td>
-                    <td className="px-6 sm:px-8 py-5 sm:py-6 text-right">
+                    <td className="px-8 py-4 text-right">
                       <button 
                         onClick={() => navigate(`/profile/${influencer.id}`)}
-                        className="inline-flex items-center justify-center p-2 sm:p-3 bg-slate-900 border border-slate-800 rounded-xl hover:border-indigo-500/50 hover:bg-slate-800 transition-all group/btn shadow-lg"
+                        className="inline-flex items-center justify-center w-10 h-10 bg-slate-900 border border-white/10 rounded-xl hover:border-indigo-500/50 hover:bg-slate-800 transition-all shadow-lg group/btn"
                       >
-                        <span className="text-slate-400 group-hover/btn:text-indigo-400 font-bold block transition-transform group-hover/btn:translate-x-0.5">→</span>
+                        <svg className="w-5 h-5 text-slate-500 group-hover/btn:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
                       </button>
                     </td>
                   </tr>

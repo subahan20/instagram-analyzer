@@ -15,7 +15,7 @@ export default function InstagramSearch() {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!url) return;
 
     setLoading(true);
@@ -27,7 +27,6 @@ export default function InstagramSearch() {
         throw new Error('Please select a category first.');
       }
 
-      // Step 1: Sync profile (influencer + metrics)
       const { data, error: funcError } = await supabase.functions.invoke('post', {
         body: { 
           action: 'fetch_and_store',
@@ -56,8 +55,7 @@ export default function InstagramSearch() {
         ? url.trim()
         : `https://www.instagram.com/${url.trim().replace('@', '')}/`;
 
-      // Step 2: Trigger n8n Background Scraper via Webhook Instead of Edge Function
-      const n8nWebhookUrl = 'http://localhost:5678/webhook/5d95366a-c416-4136-bfa6-9ed2dfbdca3e'; // REPLACE THIS WITH YOUR WEBHOOK!
+      const n8nWebhookUrl = 'http://localhost:5678/webhook/5d95366a-c416-4136-bfa6-9ed2dfbdca3e'; 
       
       try {
         const response = await fetch(n8nWebhookUrl, {
@@ -73,7 +71,6 @@ export default function InstagramSearch() {
         console.error("Failed to trigger webhook, but continuing:", webhookErr);
       }
 
-
       setSuccess(true);
       setUrl('');
       navigate('/dashboard');
@@ -86,114 +83,131 @@ export default function InstagramSearch() {
   };
 
   return (
-    <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 lg:py-24 xl:py-32 flex flex-col items-center justify-center min-h-[90vh]">
-      {/* Search Header Section */}
-      <div className="w-full max-w-5xl bg-slate-900/40 border border-slate-800 rounded-[2.5rem] sm:rounded-[4rem] p-6 sm:p-12 lg:p-16 xl:p-20 shadow-2xl backdrop-blur-xl relative overflow-hidden group">
-        {/* Premium Decorative blurs */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none group-hover:bg-indigo-500/15 transition-all duration-1000"></div>
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-violet-500/10 blur-[120px] rounded-full pointer-events-none group-hover:bg-violet-500/15 transition-all duration-1000"></div>
+    <div className="relative h-screen overflow-hidden text-slate-50 selection:bg-indigo-500/30">
+      {/* Premium AI SaaS Aesthetic Background - Using home-background.png from the public directory */}
+      <div 
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-1000 scale-105"
+        style={{ 
+          backgroundImage: `url('/home-background.png')` 
+        }}
+      >
+        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[1px]"></div>
+      </div>
 
-        <header className="mb-10 sm:mb-16 text-center max-w-3xl mx-auto relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-black tracking-[0.2em] uppercase mb-6 animate-fade-in">
-            <span>✨ AI Power Analytics</span>
+      <div className="relative z-20 h-full flex flex-col">
+        {/* Compact Navigation */}
+        <nav className="flex justify-between items-center px-6 sm:px-12 py-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/20">A</div>
+            <div className="hidden sm:block">
+              <h1 className="text-lg font-bold tracking-tight text-white leading-none">Instagram <span className="text-gradient">Analyzer</span></h1>
+              <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase opacity-70 mt-0.5">Premium AI Intelligence</p>
+            </div>
           </div>
-          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white mb-6 leading-[1.1]">
-            Instagram <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-indigo-400 bg-[length:200%_auto] animate-gradient">Analyzer</span>
-          </h1>
-          <p className="text-slate-400 text-sm sm:text-lg lg:text-xl font-medium leading-relaxed opacity-80">
-            Discover trending content by category. Track performance metrics and curate the best reels for your industry.
-          </p>
-        </header>
+          <Link 
+            to="/dashboard" 
+            className="group flex items-center gap-2 px-5 py-2.5 glass rounded-xl border border-white/5 hover:border-indigo-500/50 transition-all shadow-xl"
+          >
+            <span className="text-slate-300 group-hover:text-white text-xs font-bold tracking-wider uppercase transition-colors">View Sync History</span>
+            <span className="text-indigo-400 group-hover:translate-x-0.5 transition-transform">→</span>
+          </Link>
+        </nav>
 
-        <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8 relative z-10 max-w-4xl mx-auto">
-          <div className="flex flex-col gap-6 sm:gap-8">
-            <div className="relative group">
-              <input
-                type="text"
-                placeholder="Instagram Username or URL..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/50 focus:ring-8 focus:ring-indigo-500/5 text-white px-6 sm:px-10 py-5 sm:py-6 rounded-2xl sm:rounded-[2rem] outline-none transition-all placeholder:text-slate-700 font-bold text-base sm:text-lg lg:text-xl shadow-inner shadow-black/20"
-              />
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none text-slate-800 font-black text-xs hidden lg:block tracking-[0.3em]">PRO SERVICE</div>
+        {/* Centered Main Experience */}
+        <main className="flex-1 flex flex-col items-center justify-center px-4 -mt-12">
+          <div className="w-full max-w-4xl space-y-12 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
+            {/* Hero Text */}
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-[10px] font-bold tracking-[0.2em] uppercase mb-4 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                Next-Gen AI Analytics
+              </div>
+              <h2 className="text-5xl sm:text-7xl font-bold tracking-tight text-white leading-[1.1]">
+                Instagram <span className="text-gradient">Analyzer</span>
+              </h2>
+              <p className="max-w-xl mx-auto text-slate-400 text-sm sm:text-base font-medium leading-relaxed opacity-80">
+                Uncover the viral potential of any creator. Track live performance and find the top 1% of content.
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-              <div className="space-y-2">
-                <label className="block text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] mb-2 ml-6 opacity-60">Industry Category</label>
+            {/* High-End Search Interface - Using Div instead of Form for easier centering/control if needed, but keeping handleSubmit logic */}
+            <div className="glass rounded-[2.5rem] p-4 sm:p-2 border border-white/10 shadow-2xl relative group max-w-2xl mx-auto w-full">
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 via-violet-500/20 to-indigo-500/20 rounded-[2.6rem] blur-xl opacity-0 group-focus-within:opacity-100 transition duration-700"></div>
+              
+              <div className="relative flex flex-col sm:flex-row items-stretch gap-3 p-4 sm:p-1">
+                <div className="flex-1 relative">
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="Enter Instagram Profile or URL..."
+                    className="w-full bg-slate-950/40 focus:bg-slate-950/60 border-none text-white pl-14 pr-6 py-5 rounded-[1.8rem] outline-none text-lg font-medium transition-all placeholder:text-slate-600 focus:ring-0"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  />
+                </div>
+                <button
+                  onClick={handleSubmit}
+                  disabled={loading || !url.trim()}
+                  className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-800 disabled:opacity-50 text-white font-bold text-sm tracking-widest uppercase px-10 py-5 sm:py-0 rounded-3xl transition-all shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98]"
+                >
+                  {loading ? 'Starting Sync...' : 'Sync Now'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 max-w-2xl mx-auto w-full group-focus-within:opacity-100 opacity-60 transition-opacity">
+              <div className="w-full sm:w-1/2 text-left space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Category</label>
                 <CategorySelector 
-                  selectedCategory={category} 
+                  selectedCategory={category}
                   onCategoryChange={(cat) => {
                     setCategory(cat);
-                    setSubcategory('');
-                  }} 
+                    setSubcategory(null);
+                  }}
+                  showOthers={true}
                 />
               </div>
-
-              <div className="space-y-2">
-                <label className="block text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] mb-2 ml-6 opacity-60">Specialization</label>
+              <div className="w-full sm:w-1/2 text-left space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Specialization</label>
                 <SubcategorySelector 
-                  categoryId={category?.id} 
-                  selectedSubcategory={subcategory} 
-                  onSubcategoryChange={setSubcategory} 
+                  categoryId={category?.id}
+                  selectedSubcategory={subcategory}
+                  onSubcategoryChange={setSubcategory}
                 />
-                {!category && (
-                  <div className="h-[64px] sm:h-[72px] flex items-center px-8 text-slate-700 italic text-sm border border-dashed border-slate-800 rounded-2xl sm:rounded-[2rem] bg-slate-950/20">
-                    Select a category first...
-                  </div>
-                )}
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !category}
-              className="w-full bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-3xl shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none tracking-wider text-sm sm:text-base flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>SYNCING...</span>
-                </>
-              ) : (
-                'START SYNC'
-              )}
-            </button>
-          </div>
-        </form>
-
-        {error && (
-          <div className="mt-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-center font-medium">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mt-6 p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-[2rem] text-center animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xl">✓</div>
-              <h3 className="text-xl font-bold text-white">Sync Complete!</h3>
-              <p className="text-slate-400 text-sm max-w-md mx-auto">
-                Content has been successfully analyzed and stored. You can now view the results in the analytics dashboard.
-              </p>
-              <div className="mt-4 flex items-center gap-4">
-                <button 
-                  onClick={() => setSuccess(false)}
-                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all border border-slate-700 text-sm"
-                >
-                  Sync Another
-                </button>
-                <Link 
-                  to="/dashboard"
-                  className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 text-sm"
-                >
-                  View Dashboard →
-                </Link>
+            {error && (
+              <div className="max-w-md mx-auto p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-bold uppercase tracking-widest animate-in fade-in zoom-in-95">
+                {error}
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </main>
       </div>
+
+      {loading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="relative flex flex-col items-center gap-8">
+            <div className="w-24 h-24 relative">
+              <div className="absolute inset-0 border-4 border-indigo-500/20 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="absolute inset-4 bg-indigo-500/10 rounded-full flex items-center justify-center">
+                <span className="text-2xl animate-pulse text-indigo-400 font-black">AI</span>
+              </div>
+            </div>
+            <div className="text-center space-y-3">
+              <div className="text-indigo-400 font-black text-2xl tracking-[0.4em] uppercase">Processing</div>
+              <p className="text-slate-500 text-sm font-bold tracking-widest uppercase opacity-60">Gathering Intelligence...</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,40 +1,18 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import VideoModal from './VideoModal'
 import CategorySelector from './CategorySelector'
 import SubcategorySelector from './SubcategorySelector'
 import CreatorList from './CreatorList'
 
-const ITEMS_PER_PAGE = 25;
-
-function Dashboard() {
+export default function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState({ name: 'All Categories', id: null })
   const [selectedSubcategory, setSelectedSubcategory] = useState({ name: 'All Subcategories', id: null })
   const [nameSearch, setNameSearch] = useState('')
   const [selectedVideo, setSelectedVideo] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [syncing, setSyncing] = useState(false);
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('refresh-instagram-data', {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-
-      if (error) throw error;
-      setRefreshKey(prev => prev + 1);
-    } catch (err) {
-      console.error('❌ Sync Failed:', err);
-      alert('Failed to refresh data. Please check Edge Function logs.');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // Auto-refresh data every 60 seconds to show latest updates from Cron
   useEffect(() => {
@@ -44,64 +22,68 @@ function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
-      {/* Sticky Header Section */}
-      <div className="sticky top-0 z-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 bg-slate-950/80 backdrop-blur-2xl border-b border-slate-800/50 shadow-2xl relative overflow-hidden">
-        {/* Decorative background element for premium feel on wide screens */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 blur-[120px] -mr-48 -mt-48 rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-500/5 blur-[100px] -ml-32 -mb-32 rounded-full pointer-events-none"></div>
-        
-        <div className="max-w-[2000px] mx-auto relative z-10">
-          <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 sm:gap-8">
-            <div className="flex items-center gap-4 sm:gap-6">
+    <div className="relative min-h-screen bg-slate-950">
+      {/* Premium AI SaaS Background */}
+      <div 
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{ 
+          backgroundImage: `url('/home-background.png')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.5
+        }}
+      >
+        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[1px]"></div>
+      </div>
+
+      {/* Sticky Premium Header */}
+      <div className="sticky top-0 z-50 glass border-b border-white/5 shadow-2xl overflow-hidden">
+        {/* Subtle Header Glows */}
+        <div className="absolute top-0 left-1/4 w-[400px] h-[100px] bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+        <div className="absolute top-0 right-1/4 w-[200px] h-[50px] bg-violet-500/5 blur-[60px] rounded-full pointer-events-none"></div>
+
+        <div className="max-w-[1800px] mx-auto relative z-10 px-4 sm:px-6 lg:px-12 py-5 lg:py-6">
+          <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8">
+            <div className="flex items-center gap-5">
               <Link 
                 to="/" 
-                className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl hover:border-indigo-500/50 transition-all group shrink-0 shadow-lg"
-                title="Back to Search"
+                className="w-10 h-10 flex items-center justify-center glass rounded-xl hover:bg-white/10 transition-colors group"
+                title="Back to Landing"
               >
-                <span className="text-slate-500 group-hover:text-indigo-400 font-bold block rotate-0">←</span>
+                <svg className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
               </Link>
               <div>
-                <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tracking-tight text-white leading-none">
-                  Creator <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Discovery</span>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight">
+                  Creator <span className="text-gradient">Discovery</span>
                 </h1>
-                <p className="text-slate-500 text-[8px] sm:text-[10px] md:text-xs font-bold tracking-[0.2em] uppercase mt-1.5 opacity-70">
-                  Premium Performance Intelligence
+                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-semibold opacity-70 mt-0.5">
+                  Intelligence Dashboard
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full xl:w-auto mt-2 xl:mt-0">
-              {/* Sync Now Button */}
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className={`group flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black text-xs tracking-widest uppercase transition-all shadow-lg active:scale-95 ${
-                  syncing 
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
-                    : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/20'
-                }`}
-              >
-                <span className={`${syncing ? 'animate-spin' : 'group-hover:rotate-180'} transition-transform duration-500`}>
-                  {syncing ? '⌛' : '🔄'}
-                </span>
-                <span>{syncing ? 'Syncing...' : 'Sync Now'}</span>
-              </button>
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full xl:w-auto">
 
-              <div className="relative group flex-1 md:w-64 lg:w-80">
-                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 text-sm opacity-50 group-focus-within:opacity-100 transition-opacity">🔍</span>
+              <div className="relative group min-w-[300px]">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
                 <input
                   type="text"
                   value={nameSearch}
                   onChange={(e) => setNameSearch(e.target.value)}
-                  placeholder="Search creators..."
-                  className="w-full bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-300 pl-12 pr-5 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl outline-none font-semibold text-sm transition-all placeholder:text-slate-600 backdrop-blur-md"
+                  placeholder="Search creators by name..."
+                  className="w-full bg-slate-950/40 border border-slate-800 focus:border-indigo-500/50 text-slate-200 pl-11 pr-5 py-3 rounded-xl outline-none text-sm transition-all placeholder:text-slate-600 focus:ring-4 focus:ring-indigo-500/5"
                 />
               </div>
 
-              <div className="md:w-64">
+              <div className="md:w-[240px]">
                 <CategorySelector 
                   selectedCategory={selectedCategory}
                   onCategoryChange={(cat) => {
@@ -114,7 +96,7 @@ function Dashboard() {
               </div>
 
               {selectedCategory?.name !== 'All Categories' && (
-                <div className="md:w-64 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="md:w-[240px] animate-in fade-in slide-in-from-right-4 duration-300">
                   <SubcategorySelector 
                     categoryId={selectedCategory?.id}
                     selectedSubcategory={selectedSubcategory}
@@ -128,15 +110,17 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-screen">
-        {/* Creator Listing (Relational Table via CreatorList) */}
-        <CreatorList 
-          key={refreshKey}
-          categoryId={selectedCategory?.id}
-          subcategoryId={selectedSubcategory?.id}
-          nameSearch={nameSearch}
-        />
-      </div>
+      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
+        {/* Creator Listing */}
+        <div className="relative z-10">
+          <CreatorList 
+            key={refreshKey}
+            categoryId={selectedCategory?.id}
+            subcategoryId={selectedSubcategory?.id}
+            nameSearch={nameSearch}
+          />
+        </div>
+      </main>
 
       {selectedVideo && (
         <VideoModal 
@@ -147,5 +131,3 @@ function Dashboard() {
     </div>
   )
 }
-
-export default Dashboard

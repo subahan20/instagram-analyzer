@@ -82,7 +82,7 @@ export default function SubcategorySelector({ categoryId, selectedSubcategory, o
     }
   };
 
-  const baseSelectClass = "w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 text-white px-5 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-3xl outline-none transition-all font-medium text-sm sm:text-base lg:text-lg appearance-none cursor-pointer disabled:opacity-50";
+  const baseSelectClass = "w-full bg-slate-950/40 border border-slate-800 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 text-slate-200 px-5 sm:px-6 py-3 rounded-xl sm:rounded-2xl outline-none transition-all font-semibold text-sm sm:text-base appearance-none cursor-pointer disabled:opacity-50 glass group-hover:border-slate-700";
 
   if (!categoryId) return null;
 
@@ -117,13 +117,13 @@ export default function SubcategorySelector({ categoryId, selectedSubcategory, o
             placeholder="Enter new subcategory name..."
             value={newSubcategory}
             onChange={(e) => setNewSubcategory(e.target.value)}
-            className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 text-white px-5 py-4 rounded-2xl outline-none transition-all placeholder:text-slate-600 font-medium text-sm sm:text-base"
+            className="flex-1 bg-slate-950/40 border border-slate-800 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 text-slate-200 px-5 py-3 rounded-xl outline-none transition-all placeholder:text-slate-600 font-semibold text-sm"
           />
           <button
             type="button"
             onClick={handleAddSubcategory}
             disabled={isAdding || !newSubcategory.trim()}
-            className="sm:w-32 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-2"
+            className="sm:w-32 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
           >
             {isAdding ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
