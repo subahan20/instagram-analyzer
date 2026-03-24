@@ -98,7 +98,21 @@ export default function InstagramSearch() {
         {/* Compact Navigation */}
         <nav className="flex justify-between items-center px-6 sm:px-12 py-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/20">A</div>
+            <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <svg 
+                className="w-5 h-5 text-white" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              </svg>
+            </div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-bold tracking-tight text-white leading-none">Instagram <span className="text-gradient">Analyzer</span></h1>
               <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase opacity-70 mt-0.5">Premium AI Intelligence</p>

@@ -270,7 +270,14 @@ function VideoCard({ video, onClick, isViral = false }) {
             muted 
             loop 
             playsInline
-            onMouseEnter={(e) => e.currentTarget.play()}
+            onMouseEnter={(e) => {
+              const playPromise = e.currentTarget.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                  // Ignore error: common when hovering out quickly
+                });
+              }
+            }}
             onMouseLeave={(e) => {
               e.currentTarget.pause();
               e.currentTarget.currentTime = 0;

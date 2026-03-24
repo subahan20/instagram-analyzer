@@ -39,13 +39,6 @@ export default function VideoModal({ video, onClose }) {
             <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase">Reel</span>
           </div>
           
-          {caption && (
-            <div className="bg-black/60 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/5 shadow-2xl animate-in slide-in-from-top-4 duration-500 max-h-40 overflow-y-auto pointer-events-auto">
-              <p className="text-xs sm:text-sm md:text-base font-bold text-white leading-relaxed">
-                {caption}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Close Button */}
