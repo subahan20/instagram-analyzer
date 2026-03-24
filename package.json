@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "n8n start"
+    "start": "N8N_PORT=${PORT:-5678} n8n start"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
