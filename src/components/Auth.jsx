@@ -72,7 +72,6 @@ export default function Auth({ onAuthSuccess }) {
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("[Auth] Form submission triggered...");
     setLoading(true);
     setError(null);
     setSuccessMsg(null);
@@ -132,7 +131,6 @@ export default function Auth({ onAuthSuccess }) {
 
       // If the input doesn't look like an email, resolve it by username first
       if (!identifier.includes('@')) {
-        console.log(`[Auth] Resolving username identity: ${identifier}...`);
         const { data: resolveRes, error: resolveErr } = await invokeAdminAction('resolve_email_by_username', {
           username: identifier
         });
@@ -143,10 +141,8 @@ export default function Auth({ onAuthSuccess }) {
           return;
         }
         loginEmail = resolveRes.email;
-        console.log(`[Auth] Username resolved to: ${loginEmail}`);
       }
 
-      console.log(`[Auth] Attempting authentication for: ${loginEmail}...`);
 
       let { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: loginEmail,

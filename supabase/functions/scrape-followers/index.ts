@@ -12,7 +12,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log(`[SCRAPE-FOLLOWERS] START - Method: ${req.method}`)
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -28,7 +27,6 @@ serve(async (req) => {
     let body;
     try {
       body = await req.json();
-      console.log(`[SCRAPE-FOLLOWERS] Payload received:`, JSON.stringify(body));
     } catch (_e) {
       console.error('[SCRAPE-FOLLOWERS] ERROR: Failed to parse request JSON.');
       throw new Error('Invalid JSON in request body');
@@ -43,7 +41,6 @@ serve(async (req) => {
     // 1. Resolve Influencer ID if missing
     if (!influencerId) {
       const cleanName = username.trim().replace('@', '');
-      console.log(`[SCRAPE-FOLLOWERS] Resolving ID for username: ${cleanName}`);
       
       let { data: profile, error: profileErr } = await supabaseClient
         .from('influencers')
@@ -58,7 +55,6 @@ serve(async (req) => {
       
       // AUTO-PROVISION: If not found, create a basic record
       if (!profile) {
-        console.log(`[SCRAPE-FOLLOWERS] Profile @${cleanName} not found in DB. Auto-provisioning basic record...`);
         const { data: newProfile, error: createErr } = await supabaseClient
           .from('influencers')
           .insert([{ 
@@ -72,16 +68,13 @@ serve(async (req) => {
           console.error(`[SCRAPE-FOLLOWERS] DB Auto-provisioning Error:`, createErr);
           throw new Error(`Failed to create influencer record for @${cleanName}: ${createErr.message}`);
         }
-        console.log(`[SCRAPE-FOLLOWERS] SUCCESS: Created new record with ID: ${newProfile.id}`);
         influencerId = newProfile.id;
       } else {
-        console.log(`[SCRAPE-FOLLOWERS] Found existing ID: ${profile.id}`);
         influencerId = profile.id;
       }
     }
 
     // 2. Check Cache First (24-hour freshness check)
-    console.log(`[SCRAPE-FOLLOWERS] Checking for cached followers for ID: ${influencerId}`);
     const { data: cachedFollowers, error: cacheError } = await supabaseClient
       .from('followers')
       .select('*')
@@ -89,7 +82,6 @@ serve(async (req) => {
       .order('fetched_at', { ascending: false });
 
     if (!cacheError && cachedFollowers && cachedFollowers.length > 0) {
-      console.log(`[SCRAPE-FOLLOWERS] CACHE HIT: Returning ${cachedFollowers.length} followers.`);
       return new Response(JSON.stringify({ 
         success: true, 
         count: cachedFollowers.length, 
@@ -123,7 +115,6 @@ serve(async (req) => {
     let successfulActor = null;
 
     for (const actor of actorsToTry) {
-      console.log(`[SCRAPE-FOLLOWERS] Trying known actor: ${actor}`);
       const scraperUrl = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?token=${apifyToken}`;
       
       try {
@@ -146,7 +137,6 @@ serve(async (req) => {
         if (response.ok) {
           results = await response.json();
           if (Array.isArray(results) && results.length > 0) {
-            console.log(`[SCRAPE-FOLLOWERS] SUCCESS with actor: ${actor}`);
             successfulActor = actor;
             break;
           }
@@ -159,7 +149,6 @@ serve(async (req) => {
 
     // 2. DISCOVERY MODE
     if (!results) {
-      console.log(`[SCRAPE-FOLLOWERS] DISCOVERY: Searching...`);
       try {
         const listRes = await fetch(`https://api.apify.com/v2/acts?token=${apifyToken}`);
         if (listRes.ok) {
@@ -173,7 +162,6 @@ serve(async (req) => {
 
           if (found) {
             const discoveredSlug = `${found.username}~${found.name}`;
-            console.log(`[SCRAPE-FOLLOWERS] DISCOVERED: ${discoveredSlug}`);
             
             const scraperUrl = `https://api.apify.com/v2/acts/${discoveredSlug}/run-sync-get-dataset-items?token=${apifyToken}`;
             const finalRes = await fetch(scraperUrl, {
@@ -203,8 +191,6 @@ serve(async (req) => {
         lastError = discoveryErr.message;
       }
     }
-
-    console.log(`[SCRAPE-FOLLOWERS] Apify returned ${Array.isArray(results) ? results.length : 'non-array'} items.`);
     
     if (!Array.isArray(results)) {
        console.warn('[SCRAPE-FOLLOWERS] Warning: Apify output was not an array.', results);
@@ -225,7 +211,6 @@ serve(async (req) => {
     });
 
     if (followersData.length > 0) {
-      console.log(`[SCRAPE-FOLLOWERS] Saving ${followersData.length} followers to database...`);
       const { error: upsertError } = await supabaseClient
         .from('followers')
         .upsert(followersData, { onConflict: 'influencer_id,follower_username' });

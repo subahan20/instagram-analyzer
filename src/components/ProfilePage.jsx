@@ -2,11 +2,6 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import VideoCard from './VideoCard'
-import scraperService from '../services/scraperService'
-
-const activeProfileFetches = new Set();
-
-// getTimeAgo utility moved to shared VideoCard component
 
 function ProfilePage({ user }) {
   const { id } = useParams()
@@ -14,113 +9,87 @@ function ProfilePage({ user }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState(null)
-  const debounceTimer = useRef(null);
-  const [syncing, setSyncing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // Shows banner while n8n syncs
+  const lastSyncedAtRef = useRef(null);              // Tracks last sync timestamp
+  const pollIntervalRef = useRef(null);              // Cleanup ref
 
-  const fetchProfileData = async (showLoading = true) => {
-    if (activeProfileFetches.has(id)) return;
-    activeProfileFetches.add(id);
-    if (showLoading) setLoading(true)
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setIsSyncing(false);
+  };
+
+  // ─── LOAD DATA DIRECTLY FROM DATABASE (No Edge Function / No API call) ───
+  // This runs on first load and whenever n8n triggers fresh data.
+  const loadFromDatabase = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
-      const { data: response, error } = await supabase.functions.invoke('post', {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-        },
-        body: { 
-          action: 'get_profile',
-          influencerId: id,
-          userId: user?.id
-        }
+      // Read influencer directly from DB
+      const { data: influencer, error: infError } = await supabase
+        .from('influencers')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (infError) throw infError;
+      if (!influencer) { setData(null); return; }
+
+      // Record sync timestamp so Realtime knows baseline
+      lastSyncedAtRef.current = influencer.last_synced_at;
+
+      // Read reels and latest metrics in parallel
+      const [reelsRes, metricsRes] = await Promise.all([
+        supabase.from('reels').select('*').eq('influencer_id', influencer.id).order('posted_at', { ascending: false }),
+        supabase.from('metrics_history').select('*').eq('influencer_id', influencer.id).order('captured_at', { ascending: false }).limit(1).maybeSingle()
+      ]);
+
+      setData({
+        influencer,
+        reels: reelsRes.data || [],
+        latest_metrics: metricsRes.data || null,
+        followers_list: []
       });
-
-      if (error) throw error
-      
-      // NEW: Explicitly handle backend success: false
-      if (response && response.success === false) {
-        console.error('[Profile] Backend returned error:', response.error);
-        alert(`Configuration Error: ${response.error}`);
-        return;
-      }
-
-      setData(response.data)
     } catch (err) {
-      console.error('Error fetching profile detail:', err)
+      console.error('[Profile] DB load error:', err);
     } finally {
-      activeProfileFetches.delete(id);
-      if (showLoading) setLoading(false)
+      if (showLoading) setLoading(false);
     }
-  }
-
-  // Audience synchronization handlers removed to streamline interface
-
-  const handleRefresh = async () => {
-    if (syncing) return;
-    setSyncing(true);
-    try {
-      console.log(`[Profile] Triggering refresh for: ${influencer?.username}`);
-      await scraperService.scrapeFull(influencer.username, { userId: user?.id });
-      // The realtime subscription will trigger a re-fetch automatically, 
-      // but we explicitly call fetchProfileData to be safe.
-      await fetchProfileData(false);
-    } catch (err) {
-      console.error('Refresh Error:', err);
-      alert('Knowledge extraction failed. Please try again.');
-    } finally {
-      setSyncing(false);
-    }
-  }
+  };
 
   useEffect(() => {
-    fetchProfileData();
+    loadFromDatabase();
+    return () => stopPolling();
   }, [id]);
 
-  useEffect(() => {
-    const debouncedFetch = () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => {
-        fetchProfileData(false);
-      }, 2000);
-    };
 
+  // ─── REALTIME: Only react when n8n completes a sync (last_synced_at changes) ───
+  useEffect(() => {
     const influencersChannel = supabase
-      .channel(`profile-updates-${id}`)
+      .channel(`profile-sync-signal-${id}`)
       .on(
         'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'influencers',
-          filter: `id=eq.${id}`
-        },
-        () => {
-          debouncedFetch();
+        { event: 'UPDATE', schema: 'public', table: 'influencers', filter: `id=eq.${id}` },
+        (payload) => {
+          const old = payload.old || {};
+          const next = payload.new || {};
+
+          // ONLY refresh when the automation sync timestamp changes
+          // This fires ONLY when n8n completes a scrape — not on page load, tab switch, etc.
+          if (old.last_synced_at !== next.last_synced_at) {
+            console.log('[REALTIME] n8n sync completed. Loading fresh data from DB...');
+            loadFromDatabase(false);
+          } else {
+            console.log('[REALTIME] Ignoring non-sync update.');
+          }
         }
       )
       .subscribe();
 
-    const reelsChannel = supabase
-      .channel(`reels-updates-${id}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'reels',
-          filter: `influencer_id=eq.${id}`
-        },
-        () => {
-          debouncedFetch();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(influencersChannel);
-      supabase.removeChannel(reelsChannel);
-    };
+    return () => supabase.removeChannel(influencersChannel);
   }, [id]);
+
 
   const influencer = data?.influencer;
   const metrics = data?.latest_metrics || {};
@@ -172,6 +141,14 @@ function ProfilePage({ user }) {
       >
         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px]"></div>
       </div>
+
+      {/* SYNCING BANNER: Shown while polling for fresh data */}
+      {isSyncing && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-3 bg-indigo-600/90 backdrop-blur-md rounded-full shadow-2xl border border-indigo-400/30 animate-pulse">
+          <div className="w-3 h-3 rounded-full bg-white animate-ping"></div>
+          <span className="text-white text-sm font-bold tracking-wide">Fetching live Instagram data...</span>
+        </div>
+      )}
 
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-12">
         <div className="mb-12">

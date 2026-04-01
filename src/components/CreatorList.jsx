@@ -77,7 +77,6 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch, use
               payload.new.last_fetched_at !== payload.old.last_fetched_at;
             
             if (!metricsChanged) {
-              console.log('[CreatorList] Minor update detected (last_checked_at). Skipping refresh.');
               return;
             }
           }

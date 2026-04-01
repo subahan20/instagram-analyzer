@@ -18,7 +18,6 @@ function FollowersPage() {
     if (isFirstLoad) setLoading(true);
     setError(null);
     try {
-      console.log(`[FollowersPage] Fetching intelligence for: ${username}...`);
       
       const { data: response, error: apiError } = await supabase.functions.invoke('post', {
         body: { 
@@ -32,8 +31,6 @@ function FollowersPage() {
       const influencerData = response.data.influencer;
       const cachedFollowers = response.data.followers_list || [];
       
-      console.log(`[FollowersPage] Profile found: ${influencerData?.username}. Cached followers: ${cachedFollowers.length}`);
-      
       setInfluencer(influencerData);
       setFollowers(cachedFollowers);
 
@@ -41,11 +38,9 @@ function FollowersPage() {
       const shouldSync = forceSync || (cachedFollowers.length === 0 && !syncing);
       
       if (influencerData && shouldSync && !syncing) {
-        console.log(`[FollowersPage] Sync Triggered. Force: ${forceSync}. calling Puppeteer API...`);
         setSyncing(true);
         try {
           const syncRes = await scraperService.syncAudience(influencerData.id, `https://www.instagram.com/${username}/`);
-          console.log('[FollowersPage] API Success:', syncRes);
         } catch (syncErr) {
           console.error('[FollowersPage] Sync API Error:', syncErr.message);
           setError(`Sync Error: ${syncErr.message}`);

@@ -20,7 +20,6 @@ export default function CategorySelector({
           .order('name');
         
         if (error) throw error;
-        console.log('[CategorySelector] Fetched Categories:', data);
         setCategories(data || []);
       } catch (err) {
         console.error('[CategorySelector] Fetch Error:', err);

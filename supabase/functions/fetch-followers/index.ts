@@ -20,8 +20,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log(`[fetch-followers] Mocking for: ${username}`);
-
     // --- Mock follower data generation ---
     const fResults = Array.from({ length: 20 }).map((_, i) => ({
       username: `follower_${i}_${Math.random().toString(36).substring(7)}`,

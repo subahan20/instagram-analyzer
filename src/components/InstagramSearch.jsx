@@ -48,21 +48,15 @@ export default function InstagramSearch({ user }) {
         userId: user.id 
       };
       
-      console.log('[InstagramSearch] STAGE 1: Check Update Request ->', { username: trimmedUrl, userId: user.id });
-      
       // STAGE 1: Check Update (Lightweight)
       const checkRes = await scraperService.checkUpdate(trimmedUrl, { userId: user.id });
-      console.log('[InstagramSearch] STAGE 1: Check Update Response ->', checkRes);
       
       if (!checkRes.hasChanged) {
-        console.log('[InstagramSearch] No changes detected. Stopping.');
         setMessage('Network check complete: No updates found on Instagram.');
         setSuccess(true);
         // DO NOT update state with same data to avoid re-renders
         return;
       }
-
-      console.log('[InstagramSearch] STAGE 2: Scrape Full Request ->', payload);
 
       // STAGE 2: Scrape Full (ONLY IF CHANGED)
       const fullRes = await scraperService.scrapeFull(trimmedUrl, {
@@ -70,7 +64,6 @@ export default function InstagramSearch({ user }) {
         subcategoryId: subcategory?.id,
         userId: user.id
       });
-      console.log('[InstagramSearch] STAGE 2: Scrape Full Response ->', fullRes);
 
       if (fullRes.success) {
         setSyncStatus('Finalizing Intelligence...');
@@ -81,7 +74,6 @@ export default function InstagramSearch({ user }) {
 
         // STAGE 3: AUTOMATIC FOLLOWERS SYNC (Mock)
         try {
-          console.log('[InstagramSearch] STAGE 3: Triggering automated audience extraction...');
           await scraperService.syncAudience(influencerId, targetUrl);
         } catch (followerErr) {
           console.warn('[InstagramSearch] Audience extraction skipped/failed:', followerErr.message);

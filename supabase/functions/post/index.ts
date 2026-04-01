@@ -3,7 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma, accept, origin',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
 serve(async (req) => {
@@ -43,7 +44,6 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
-    console.log(`[POST] Action: ${action}, Username: ${rawUsername}`);
 
     // --- Helper for Internal Identity Mapping ---
     const mapToIdentity = (u: string) => {
@@ -111,9 +111,17 @@ serve(async (req) => {
     };
 
     // ─── NORMALIZED ACTION ROUTING ───
-    const effectiveAction = (action || 'sync_reels').trim().toLowerCase();
+    const effectiveAction = (action || 'ping').trim().toLowerCase();
     
     switch (effectiveAction) {
+      case 'ping': {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Signal hub operational', 
+          timestamp: new Date().toISOString() 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
       case 'check_update': {
         const username = extractUsername(rawUsername || '');
         if (username === 'unknown') {
@@ -227,7 +235,6 @@ serve(async (req) => {
         }
 
         const isNumeric = !isNaN(Number(rawId));
-        console.log(`[POST] Fetching profile for ID: ${rawId} (Numeric: ${isNumeric})`);
 
         let query = supabase.from('influencers').select('*');
         if (isNumeric) {
@@ -258,9 +265,6 @@ serve(async (req) => {
              } 
            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
-
-        console.log(`[POST] Success: Identity resolved to ID ${influencer.id}. Fetching associated intelligence...`);
-
         // Fetch sub-data with standard async/await (NO BUGGY .catch() CALLS)
         const [reelsRes, metricsRes, followersRes] = await Promise.all([
           supabase.from('reels').select('*').eq('influencer_id', influencer.id).order('posted_at', { ascending: false }),
@@ -285,14 +289,14 @@ serve(async (req) => {
       case 'scrape_full':
       case 'sync_reels': {
         const targetUrl = body.url || rawUsername;
-        if (!targetUrl) throw new Error('Uplink URL is required for synchronization');
+        if (!targetUrl) {
+           throw new Error('Sync Request Error: No "username" or "url" provided. Please ensure your request body includes a target identity.');
+        }
 
         const targetUsername = extractUsername(targetUrl);
         if (targetUsername === 'unknown') throw new Error(`Signal invalid. Could not extract identity from: ${targetUrl}`);
 
         if (!apifyToken) throw new Error('Missing APIFY token required for real intelligence extraction');
-
-        console.log(`[POST] Initializing Real Sync: ${targetUsername}`);
 
         const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
         const reelsScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
@@ -325,9 +329,6 @@ serve(async (req) => {
           throw new Error('Identity not found on Instagram');
         }
 
-        console.log(`[POST] Raw Scraped Data Profile for ${targetUsername}:`, JSON.stringify(raw).substring(0, 500) + '...');
-        console.log(`[POST] Found ${reelsResultsRaw.length} reels for ${targetUsername}`);
-
         const reelPosts = reelsResultsRaw.filter((p: any) => {
           const type = (p.type || p.product_type || '').toLowerCase();
           return type === 'video' || type === 'reel' || !!p.videoUrl;
@@ -351,8 +352,6 @@ serve(async (req) => {
           subcategory_id: subcategoryId
         };
 
-        console.log(`[POST] Upserting to influencers table for ${targetUsername}. Payload:`, influencerPayload);
-
         const { data: influencer, error: infError } = await supabase
           .from('influencers')
           .upsert(influencerPayload, { onConflict: 'username' })
@@ -363,8 +362,6 @@ serve(async (req) => {
           console.error(`[POST] Database Insert Error (influencers) for ${targetUsername}:`, infError);
           throw infError;
         }
-
-        console.log(`[POST] Successfully persisted influencer ${targetUsername} with ID: ${influencer.id}`);
 
         // Save Real Reels
         if (reelPosts.length > 0) {
@@ -379,8 +376,6 @@ serve(async (req) => {
             posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : now,
             user_id: userId
           }));
-
-          console.log(`[POST] Upserting ${reelsData.length} reels for influencer ID: ${influencer.id}`);
           const { error: reelsError } = await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url' });
           if (reelsError) {
             console.error(`[POST] Database Insert Error (reels) for ${targetUsername}:`, reelsError);
@@ -398,8 +393,6 @@ serve(async (req) => {
       case 'resolve_email_by_username': {
         const { username } = body;
         if (!username) throw new Error('Username is required');
-
-        console.log(`[POST] Resolving email for username: ${username}`);
         
         const { data: profile, error: profileErr } = await supabase
           .from('profiles')
@@ -408,7 +401,6 @@ serve(async (req) => {
           .maybeSingle();
 
         if (profileErr || !profile) {
-          console.log(`[POST] Profile not found for ${username}. Attempting global user search fallback...`);
           const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers();
           
           if (!listErr) {
@@ -419,7 +411,6 @@ serve(async (req) => {
             );
             
             if (foundUser?.email) {
-               console.log(`[POST] Identity recovered for ${username} via global search. Found user: ${foundUser.email}`);
                await supabase.from('profiles').upsert({ id: foundUser.id, username: cleanUser }, { onConflict: 'id' });
                
                return new Response(JSON.stringify({ success: true, email: foundUser.email }), { 
@@ -438,8 +429,6 @@ serve(async (req) => {
             status: 200 
           });
         }
-
-        console.log(`[POST] Successfully resolved email for ${username}: ${profile.id}. Fetching Auth record...`);
         const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(profile.id);
         
         if (authErr || !authUser?.user?.email) {
@@ -495,8 +484,6 @@ serve(async (req) => {
           throw new Error('Email, Username, and Password are all required');
         }
 
-        console.log(`[POST] Creating user: ${email} with username: ${username}`);
-
         const { data: authData, error: createError } = await supabase.auth.admin.createUser({
           email,
           password,
@@ -511,7 +498,6 @@ serve(async (req) => {
                             createError.message.toLowerCase().includes('already exists');
           
           if (isExisting) {
-            console.log(`[POST] User ${email} already exists. Attempting update...`);
             const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
             if (!listError) {
               const existingUser = users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
@@ -532,7 +518,6 @@ serve(async (req) => {
         if (!targetUser) throw new Error('Failed to identify target user for profile sync');
 
         // Upsert to profiles table to store the username
-        console.log(`[POST] Syncing profile for user ${targetUser.id} with username ${username}`);
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({
