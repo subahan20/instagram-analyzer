@@ -1,82 +1,106 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import scraperService from '../services/scraperService';
 import CategorySelector from './CategorySelector';
 import SubcategorySelector from './SubcategorySelector';
+import CreatorList from './CreatorList';
 
-export default function InstagramSearch() {
+export default function InstagramSearch({ user }) {
   const [url, setUrl] = useState('');
   const [category, setCategory] = useState(null);
   const [subcategory, setSubcategory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [message, setMessage] = useState('');
+  const [syncData, setSyncData] = useState(null);
+  const [syncStatus, setSyncStatus] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!url) return;
+    if (!url || !url.trim()) return;
+
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    if (!category?.id) {
+      setError('Please select a category first.');
+      return;
+    }
 
     setLoading(true);
     setError('');
     setSuccess(false);
+    // Explicitly do NOT clear syncData or trigger re-renders unless necessary
 
     try {
-      if (!category?.name) {
-        throw new Error('Please select a category first.');
-      }
-
-      const { data, error: funcError } = await supabase.functions.invoke('post', {
-        body: { 
-          action: 'fetch_and_store',
-          username: url.trim(),
-          categoryId: category.id,
-          subcategoryId: subcategory?.id || null
-        }
-      });
-
-      if (funcError) {
-        let errorDetail = funcError.message;
-        if (funcError.response) {
-          try {
-            const body = await funcError.response.clone().json();
-            errorDetail = body.error || body.message || JSON.stringify(body);
-          } catch {
-            try { errorDetail = (await funcError.response.text()).slice(0, 200); } catch { /* noop */ }
-          }
-        }
-        throw new Error(errorDetail || 'Edge Function failed');
-      }
-
-      if (!data.success) throw new Error(data.message || 'Failed to fetch data');
-
-      const instagramUrl = url.trim().startsWith('http')
-        ? url.trim()
-        : `https://www.instagram.com/${url.trim().replace('@', '')}/`;
-
-      const n8nWebhookUrl = 'http://localhost:5678/webhook/5d95366a-c416-4136-bfa6-9ed2dfbdca3e'; 
+      const trimmedUrl = url.trim();
+      const payload = { 
+        url: trimmedUrl, 
+        categoryId: category.id, 
+        subcategoryId: subcategory?.id, 
+        userId: user.id 
+      };
       
-      try {
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instagramUrl, influencerId: data.influencerId })
-        });
-        
-        if (!response.ok) {
-           console.warn(`webhook warned with status ${response.status}`);
-        }
-      } catch (webhookErr) {
-        console.error("Failed to trigger webhook, but continuing:", webhookErr);
+      console.log('[InstagramSearch] STAGE 1: Check Update Request ->', { username: trimmedUrl, userId: user.id });
+      
+      // STAGE 1: Check Update (Lightweight)
+      const checkRes = await scraperService.checkUpdate(trimmedUrl, { userId: user.id });
+      console.log('[InstagramSearch] STAGE 1: Check Update Response ->', checkRes);
+      
+      if (!checkRes.hasChanged) {
+        console.log('[InstagramSearch] No changes detected. Stopping.');
+        setMessage('Network check complete: No updates found on Instagram.');
+        setSuccess(true);
+        // DO NOT update state with same data to avoid re-renders
+        return;
       }
 
-      setSuccess(true);
-      setUrl('');
-      navigate('/dashboard');
+      console.log('[InstagramSearch] STAGE 2: Scrape Full Request ->', payload);
+
+      // STAGE 2: Scrape Full (ONLY IF CHANGED)
+      const fullRes = await scraperService.scrapeFull(trimmedUrl, {
+        categoryId: category.id,
+        subcategoryId: subcategory?.id,
+        userId: user.id
+      });
+      console.log('[InstagramSearch] STAGE 2: Scrape Full Response ->', fullRes);
+
+      if (fullRes.success) {
+        setSyncStatus('Finalizing Intelligence...');
+        
+        const influencerId = fullRes.data.id;
+        const targetUsername = fullRes.data.username;
+        const targetUrl = `https://www.instagram.com/${targetUsername}/`;
+
+        // STAGE 3: AUTOMATIC FOLLOWERS SYNC (Mock)
+        try {
+          console.log('[InstagramSearch] STAGE 3: Triggering automated audience extraction...');
+          await scraperService.syncAudience(influencerId, targetUrl);
+        } catch (followerErr) {
+          console.warn('[InstagramSearch] Audience extraction skipped/failed:', followerErr.message);
+        }
+
+        setSuccess(true);
+        setMessage('Complete Intelligence updated successfully ✨');
+        setSyncData(fullRes.data);
+        setUrl('');
+        setRefreshKey(prev => prev + 1);
+        
+        // Redirect to profile page after sync for better UX
+        setTimeout(() => navigate(`/profile/${influencerId}`), 1000);
+      } else {
+        throw new Error(fullRes.error || 'Failed to sync profile');
+      }
     } catch (err) {
-      console.error('Sync failed:', err);
-      setError(err.message || 'An unexpected error occurred. Please check the URL and try again.');
+      console.error('[InstagramSearch] Sync workflow failed:', err);
+      setError(err.message || 'Synchronization failed.');
     } finally {
       setLoading(false);
     }
@@ -118,13 +142,43 @@ export default function InstagramSearch() {
               <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase opacity-70 mt-0.5">Premium AI Intelligence</p>
             </div>
           </div>
-          <Link 
-            to="/dashboard" 
-            className="group flex items-center gap-2 px-5 py-2.5 glass rounded-xl border border-white/5 hover:border-indigo-500/50 transition-all shadow-xl"
-          >
-            <span className="text-slate-300 group-hover:text-white text-xs font-bold tracking-wider uppercase transition-colors">View Sync History</span>
-            <span className="text-indigo-400 group-hover:translate-x-0.5 transition-transform">→</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link 
+              to="/dashboard" 
+              className="group flex items-center gap-2 px-5 py-2.5 glass rounded-xl border border-white/5 hover:border-indigo-500/50 transition-all shadow-xl"
+            >
+              <span className="text-slate-300 group-hover:text-white text-xs font-bold tracking-wider uppercase transition-colors">View Sync History</span>
+              <span className="text-indigo-400 group-hover:translate-x-0.5 transition-transform">→</span>
+            </Link>
+            
+            {user ? (
+              <button 
+                onClick={() => supabase.auth.signOut()}
+                className="group flex items-center justify-center w-11 h-11 glass rounded-xl border border-white/5 hover:border-rose-500/50 hover:bg-rose-500/5 transition-all shadow-xl"
+                title="Terminate Session"
+              >
+                <svg 
+                  className="w-5 h-5 text-slate-400 group-hover:text-rose-500 transition-colors" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                  <line x1="12" y1="2" x2="12" y2="12"></line>
+                </svg>
+              </button>
+            ) : (
+              <Link 
+                to="/auth?mode=login"
+                className="px-6 py-2.5 bg-white text-slate-950 text-[10px] font-black uppercase tracking-[0.3em] rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xl"
+              >
+                Sign In
+              </Link>
+            )}
+          </div>
         </nav>
 
         {/* Centered Main Experience */}
@@ -183,7 +237,7 @@ export default function InstagramSearch() {
                     setCategory(cat);
                     setSubcategory(null);
                   }}
-                  showOthers={true}
+                  showOthers
                 />
               </div>
               <div className="w-full sm:w-1/2 text-left space-y-2">
@@ -201,6 +255,12 @@ export default function InstagramSearch() {
                 {error}
               </div>
             )}
+
+            {success && message && (
+              <div className="max-w-md mx-auto p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold uppercase tracking-widest animate-in fade-in zoom-in-95">
+                {message}
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -212,12 +272,28 @@ export default function InstagramSearch() {
               <div className="absolute inset-0 border-4 border-indigo-500/20 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               <div className="absolute inset-4 bg-indigo-500/10 rounded-full flex items-center justify-center">
-                <span className="text-2xl animate-pulse text-indigo-400 font-black">AI</span>
+                <svg 
+                  className="w-10 h-10 text-indigo-400 animate-pulse" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
               </div>
             </div>
             <div className="text-center space-y-3">
-              <div className="text-indigo-400 font-black text-2xl tracking-[0.4em] uppercase">Processing</div>
-              <p className="text-slate-500 text-sm font-bold tracking-widest uppercase opacity-60">Gathering Intelligence...</p>
+              <div className="text-indigo-400 font-black text-2xl tracking-[0.4em] uppercase">
+                {syncStatus || 'Processing'}
+              </div>
+              <p className="text-slate-500 text-sm font-bold tracking-widest uppercase opacity-60">
+                {syncStatus ? 'This may take up to 60 seconds...' : 'Gathering Intelligence...'}
+              </p>
             </div>
           </div>
         </div>

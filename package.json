@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "scraper": "node server/index.js",
+    "auth": "node server/auth.js",
     "start": "N8N_PORT=${PORT:-5678} n8n start"
   },
   "dependencies": {
@@ -17,6 +19,9 @@
     "express": "^5.2.1",
     "n8n": "^1.17.0",
     "nodemailer": "^8.0.2",
+    "puppeteer": "^22.6.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",

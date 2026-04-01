@@ -1,44 +1,45 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 
-// Removed Supabase fetch on mount to guarantee 0 API calls before Start Sync.
-
-const STATIC_SUBCATEGORIES_MAP = {
-  1: [
-    { id: 1, name: 'Web Development' },
-    { id: 2, name: 'Software Development' },
-    { id: 3, name: 'Data Science' },
-    { id: 4, name: 'Frontend Development' },
-    { id: 5, name: 'Backend Development' }
-  ],
-  2: [{ id: 6, name: 'jsds' }],
-  3: [{ id: 8, name: 'dfjisdjf' }],
-  4: [{ id: 7, name: 'coding' }],
-  6: [{ id: 9, name: 'djnfdlfk' }]
-};
-
 export default function SubcategorySelector({ categoryId, selectedSubcategory, onSubcategoryChange, className = "", showAllOption = false }) {
   const [subcategories, setSubcategories] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [newSubcategory, setNewSubcategory] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showOtherInput, setShowOtherInput] = useState(false);
 
-  // Use the static map for initialization
   useEffect(() => {
-    if (categoryId) {
-      const subList = STATIC_SUBCATEGORIES_MAP[categoryId] ? [...STATIC_SUBCATEGORIES_MAP[categoryId]] : [];
-      setSubcategories(subList);
-      
-      const subName = selectedSubcategory?.name || selectedSubcategory;
-      if (subName === 'Others' || (subName && subName !== 'All Subcategories' && subList && !subList.find(s => s.name === subName))) {
-        setShowOtherInput(true);
-      } else {
-        setShowOtherInput(false);
+    async function fetchSubcategories() {
+      if (!categoryId) {
+        setSubcategories([]);
+        return;
       }
-    } else {
-      setSubcategories([]);
-      setShowOtherInput(false);
+      
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('subcategories')
+          .select('*')
+          .eq('category_id', categoryId)
+          .order('name');
+        
+        if (error) throw error;
+        const subList = data || [];
+        setSubcategories(subList);
+
+        const subName = selectedSubcategory?.name || selectedSubcategory;
+        if (subName === 'Others' || (subName && subName !== 'All Subcategories' && subList.length > 0 && !subList.find(s => s.name === subName))) {
+          setShowOtherInput(true);
+        } else {
+          setShowOtherInput(false);
+        }
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+      } finally {
+        setLoading(false);
+      }
     }
+    fetchSubcategories();
   }, [categoryId, selectedSubcategory]);
 
   const handleSelectChange = (e) => {
@@ -64,16 +65,13 @@ export default function SubcategorySelector({ categoryId, selectedSubcategory, o
 
       if (error) throw error;
 
-      // Add to local state and cache map so it shows up
-      if (!STATIC_SUBCATEGORIES_MAP[categoryId]) {
-        STATIC_SUBCATEGORIES_MAP[categoryId] = [];
-      }
-      STATIC_SUBCATEGORIES_MAP[categoryId].push(data);
-      setSubcategories([...STATIC_SUBCATEGORIES_MAP[categoryId]]);
+      // Refresh subcategories from DB to ensure consistency
+      setSubcategories(prev => [...prev, data]);
       
       // Select the newly added subcategory object
       onSubcategoryChange(data);
       setShowOtherInput(false);
+      setNewSubcategory('');
     } catch (err) {
       console.error('Error adding subcategory:', err);
       alert('Failed to add subcategory. It might already exist.');
@@ -92,16 +90,23 @@ export default function SubcategorySelector({ categoryId, selectedSubcategory, o
         <select
           value={selectedSubcategory?.name || selectedSubcategory || ''}
           onChange={handleSelectChange}
+          disabled={loading}
           className={className || baseSelectClass}
         >
-          {showAllOption && <option value="All Subcategories">All Subcategories</option>}
-          {!showAllOption && <option value="" disabled>Select a Subcategory</option>}
-          {subcategories.map((sub) => (
-            <option key={sub.id} value={sub.name}>
-              {sub.name}
-            </option>
-          ))}
-          <option value="Others">Others</option>
+          {loading ? (
+            <option>Loading Subcategories...</option>
+          ) : (
+            <>
+              {showAllOption && <option value="All Subcategories">All Subcategories</option>}
+              {!showAllOption && <option value="" disabled>Select a Subcategory</option>}
+              {subcategories.map((sub) => (
+                <option key={sub.id} value={sub.name}>
+                  {sub.name}
+                </option>
+              ))}
+              <option value="Others">Others</option>
+            </>
+          )}
         </select>
         <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

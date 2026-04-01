@@ -11,7 +11,10 @@ CREATE TABLE IF NOT EXISTS public.subcategories (
 ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 
 -- Create policies (Allowing public access for now as per project context)
+DROP POLICY IF EXISTS "Enable read access for all users" ON public.subcategories;
 CREATE POLICY "Enable read access for all users" ON public.subcategories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all users" ON public.subcategories;
 CREATE POLICY "Enable insert access for all users" ON public.subcategories FOR INSERT WITH CHECK (true);
 
 -- Insert default subcategories for 'Coding'

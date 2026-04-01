@@ -7,15 +7,28 @@ import { useEffect } from 'react';
 export default function VideoModal({ video, onClose }) {
   // Prevent scrolling when modal is open
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    const { body } = document;
+    body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = 'unset';
+      body.style.overflow = 'unset';
     };
   }, []);
 
   if (!video) return null;
 
-  const { shortcode, video_url: videoUrl, reel_url: pageUrl, caption, views, likes, comments, posted_at } = video;
+  const { 
+    shortcode, 
+    video_url: videoUrl, 
+    reel_url: pageUrl, 
+    caption, 
+    views: vRaw, 
+    video_play_count: vpc,
+    likes, 
+    comments, 
+    posted_at 
+  } = video;
+
+  const displayViews = vpc ?? vRaw ?? 0;
   
   // Direct video URL detection (prioritize direct MP4/CDN links)
   const isDirectVideo = !!videoUrl;
@@ -77,8 +90,8 @@ export default function VideoModal({ video, onClose }) {
           <div className="flex justify-between items-end">
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 shadow-lg">
-                <span className="text-sm sm:text-lg md:text-xl text-white">👁</span>
-                <span className="text-xs sm:text-base font-black text-white">{(views || 0).toLocaleString()}</span>
+                <span className="text-sm sm:text-lg md:text-xl text-white">▶</span>
+                <span className="text-xs sm:text-base font-black text-white">{displayViews.toLocaleString()}</span>
               </div>
               <div className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 shadow-lg">
                 <span className="text-sm sm:text-lg md:text-xl text-pink-500">❤</span>

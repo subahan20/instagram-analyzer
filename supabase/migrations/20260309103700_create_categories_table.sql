@@ -9,15 +9,21 @@ CREATE TABLE IF NOT EXISTS public.categories (
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
 -- Create policies (Allowing public access for now as per project context)
+DROP POLICY IF EXISTS "Enable read access for all users" ON public.categories;
 CREATE POLICY "Enable read access for all users" ON public.categories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all users" ON public.categories;
 CREATE POLICY "Enable insert access for all users" ON public.categories FOR INSERT WITH CHECK (true);
 
--- Insert default categories
+-- Insert default categories (Idempotent)
 INSERT INTO public.categories (name)
-VALUES 
+SELECT name FROM (VALUES 
     ('Coding'),
     ('AI Tools'),
     ('Design'),
     ('EdTech'),
     ('Others')
-ON CONFLICT (name) DO NOTHING;
+) AS v(name)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.categories WHERE name = v.name
+);

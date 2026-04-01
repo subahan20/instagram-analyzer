@@ -1,15 +1,21 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import VideoModal from './VideoModal'
+import VideoCard from './VideoCard'
+import scraperService from '../services/scraperService'
 
 const activeProfileFetches = new Set();
 
-function ProfilePage() {
+// getTimeAgo utility moved to shared VideoCard component
+
+function ProfilePage({ user }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState(null)
+  const debounceTimer = useRef(null);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchProfileData = async (showLoading = true) => {
     if (activeProfileFetches.has(id)) return;
@@ -19,15 +25,25 @@ function ProfilePage() {
       const { data: response, error } = await supabase.functions.invoke('post', {
         headers: {
           'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Pragma': 'no-cache',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
         },
         body: { 
           action: 'get_profile',
-          influencerId: id
+          influencerId: id,
+          userId: user?.id
         }
       });
 
       if (error) throw error
+      
+      // NEW: Explicitly handle backend success: false
+      if (response && response.success === false) {
+        console.error('[Profile] Backend returned error:', response.error);
+        alert(`Configuration Error: ${response.error}`);
+        return;
+      }
+
       setData(response.data)
     } catch (err) {
       console.error('Error fetching profile detail:', err)
@@ -37,11 +53,28 @@ function ProfilePage() {
     }
   }
 
+  // Audience synchronization handlers removed to streamline interface
+
+  const handleRefresh = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      console.log(`[Profile] Triggering refresh for: ${influencer?.username}`);
+      await scraperService.scrapeFull(influencer.username, { userId: user?.id });
+      // The realtime subscription will trigger a re-fetch automatically, 
+      // but we explicitly call fetchProfileData to be safe.
+      await fetchProfileData(false);
+    } catch (err) {
+      console.error('Refresh Error:', err);
+      alert('Knowledge extraction failed. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   useEffect(() => {
     fetchProfileData();
   }, [id]);
-
-  const debounceTimer = useRef(null);
 
   useEffect(() => {
     const debouncedFetch = () => {
@@ -93,13 +126,13 @@ function ProfilePage() {
   const metrics = data?.latest_metrics || {};
   const reels = data?.reels || [];
 
-  const viralReels = useMemo(() => {
-    const followers = influencer?.followers || 0;
-    return [...reels]
-      .filter(reel => (reel.videoPlayCount || 0) > followers)
-      .sort((a, b) => (b.videoPlayCount || 0) - (a.videoPlayCount || 0))
-      .slice(0, 20)
-  }, [reels, influencer?.followers])
+  const { viralReels, recentReels } = useMemo(() => {
+    if (reels?.length === 0) return { viralReels: [], recentReels: [] };
+    const getViews = (r) => Number(r?.video_play_count || r?.videoPlayCount || r?.play_count || r?.views || 0);
+    const viral = [...reels].filter(r => getViews(r) >= 100).sort((a, b) => getViews(b) - getViews(a)).slice(0, 6);
+    const recent = [...reels].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
+    return { viralReels: viral, recentReels: recent };
+  }, [reels]);
 
   const handleVideoClick = (reel) => {
     setSelectedVideo(reel);
@@ -119,13 +152,14 @@ function ProfilePage() {
     <div className="min-h-screen flex flex-col items-center justify-center text-slate-400 gap-4">
       <div className="text-6xl mb-4">🔍</div>
       <p className="text-xl font-bold text-white">Profile not found</p>
-      <Link to="/dashboard" className="px-6 py-2 bg-slate-900 border border-white/10 rounded-xl hover:text-indigo-400 transition-all">Back to Dashboard</Link>
+      <Link to="/" className="px-6 py-2 bg-slate-900 border border-white/10 rounded-xl hover:text-indigo-400 transition-all">Back to Dashboard</Link>
     </div>
   )
 
+  const profilePic = influencer?.profile_pic || influencer?.profile_pic_url || influencer?.profilePicUrl;
+
   return (
     <div className="relative min-h-screen bg-slate-950">
-      {/* Premium AI SaaS Background */}
       <div 
         className="fixed inset-0 z-0 pointer-events-none"
         style={{ 
@@ -142,7 +176,7 @@ function ProfilePage() {
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-12">
         <div className="mb-12">
           <Link 
-            to="/dashboard" 
+            to="/" 
             className="inline-flex items-center gap-2 group text-slate-500 hover:text-white transition-colors"
           >
             <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,157 +190,187 @@ function ProfilePage() {
           <div className="glass rounded-[3rem] p-8 md:p-12 mb-16 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/5 blur-[100px] -mr-48 -mt-48 rounded-full pointer-events-none group-hover:bg-indigo-500/10 transition-all duration-1000"></div>
             
-            <div className="relative z-10 flex flex-col lg:flex-row items-center lg:items-end justify-between gap-12">
-              <div className="flex flex-col md:flex-row items-center md:items-end gap-8 text-center md:text-left">
-                <div className="relative group/avatar shrink-0">
-                  <div className="absolute -inset-2 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-full blur-[8px] opacity-20 group-hover/avatar:opacity-40 transition duration-700"></div>
-                  {influencer.profile_pic ? (
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-16">
+              <div className="flex items-center gap-6">
+                <div className="relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                  {profilePic ? (
                     <img 
-                      src={`https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=300&h=300&fit=cover&mask=circle`} 
+                      src={`https://images.weserv.nl/?url=${encodeURIComponent(profilePic)}&w=150&h=150&fit=cover&mask=circle`} 
                       alt={influencer.username}
-                      className="relative w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-slate-900 shadow-2xl"
-                      referrerPolicy="no-referrer"
+                      className="relative w-24 h-24 md:w-32 md:h-32 rounded-full border-2 border-white/10 shadow-2xl object-cover"
                     />
                   ) : (
-                    <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full bg-slate-900 border-4 border-slate-900 flex items-center justify-center text-5xl font-bold text-slate-700">
-                      {influencer.username?.[0]?.toUpperCase()}
+                    <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-full bg-slate-900 border-2 border-white/10 flex items-center justify-center text-4xl font-bold text-slate-700 shadow-2xl">
+                      {influencer.username?.[0]?.toUpperCase() || 'V'}
                     </div>
                   )}
                 </div>
-                <div className="space-y-4">
-                  <div className="inline-flex items-center px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-[10px] font-bold tracking-widest uppercase mb-2">
-                    {influencer.business_category || 'CREATOR'}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex items-center px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-[10px] font-bold tracking-widest uppercase">
+                      {influencer.business_category || 'CREATOR'}
+                    </div>
                   </div>
-                  <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight break-all">@{influencer.username}</h1>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight break-all">@{influencer.username}</h1>
+                  </div>
                   <p className="text-slate-400 text-sm md:text-base max-w-xl font-medium leading-relaxed italic">
                     {influencer.biography || 'No biography available.'}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 w-full lg:w-auto">
-                {[
-                  { label: 'Followers', value: influencer.followers },
-                  { label: 'Following', value: influencer.following },
-                  { label: 'Posts', value: influencer.posts }
-                ].map((stat, i) => (
-                  <div key={i} className="glass px-6 py-5 rounded-3xl text-center hover:bg-white/5 transition-colors border-white/5 shadow-xl min-w-[120px]">
-                    <div className="text-xl md:text-2xl font-bold text-white tracking-tight">{stat.value?.toLocaleString() || '0'}</div>
-                    <div className="text-[10px] text-slate-500 uppercase tracking-widest mt-1 font-bold">{stat.label}</div>
-                  </div>
-                ))}
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Followers', value: influencer.followers_count || influencer.followers },
+                    { label: 'Following', value: influencer.following_count || influencer.following || 0 },
+                    { label: 'Reels', value: influencer.posts_count || influencer.posts }
+                  ].map((stat, i) => (
+                    <div key={i} className="glass px-5 py-4 rounded-2xl text-center hover:bg-white/5 transition-colors border-white/5 shadow-xl min-w-[100px]">
+                      <div className="text-lg md:text-xl font-bold text-white tracking-tight">{stat.value?.toLocaleString() || '0'}</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1 font-bold">{stat.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
 
         <div className="space-y-24">
-          {/* Viral Reels Section */}
+          {/* Audience Section Removed */}
+
           {viralReels.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-10 px-2">
-                <div className="w-1.5 h-6 bg-rose-500 rounded-full"></div>
-                <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Viral <span className="text-rose-400">Hits</span></h2>
-                <span className="ml-2 px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-full text-[9px] font-bold text-rose-400 uppercase tracking-widest">Efficiency &gt; 100%</span>
+            <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="flex items-center justify-between mb-10 px-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-8 bg-gradient-to-b from-rose-500 to-orange-500 rounded-full shadow-[0_0_15px_rgba(244,63,94,0.5)]"></div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase leading-none">Viral <span className="bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Hits</span></h2>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-2">Highest performing intelligence</p>
+                  </div>
+                </div>
+                <div className="px-4 py-2 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">
+                    Top {viralReels.length} Insights
+                  </span>
+                </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 sm:gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12">
                 {viralReels.map((reel, idx) => (
-                  <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} isViral={true} />
+                  <VideoCard 
+                    key={reel.id || idx} 
+                    video={reel} 
+                    isViral={true} 
+                    onVideoClick={handleVideoClick}
+                  />
                 ))}
               </div>
             </section>
           )}
 
-          {/* Recent Reels Section */}
-          {reels.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-10 px-2">
-                <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>
-                <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Recent <span className="text-indigo-400">Reels</span></h2>
+          {recentReels.length > 0 && (
+            <section className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
+              <div className="flex items-center justify-between mb-10 px-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-8 bg-gradient-to-b from-indigo-500 to-violet-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase leading-none">Recent <span className="text-indigo-400">Uploads</span></h2>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-2">Chronological inventory</p>
+                  </div>
+                </div>
+                <div className="px-4 py-2 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                    {recentReels.length} Items Captured
+                  </span>
+                </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 sm:gap-8">
-                {reels.slice(0, 20).map((reel, idx) => (
-                  <VideoCard key={idx} video={reel} onClick={() => handleVideoClick(reel)} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12">
+                {recentReels.map((reel, idx) => (
+                  <VideoCard 
+                    key={reel.id || idx} 
+                    video={reel} 
+                    onVideoClick={handleVideoClick}
+                  />
                 ))}
               </div>
             </section>
+          )}
+
+          {viralReels.length === 0 && recentReels.length === 0 && (
+            <div className="py-32 text-center glass rounded-[3rem] border-white/5">
+              <div className="text-6xl mb-6 opacity-20">🎞️</div>
+              <h3 className="text-xl font-bold text-white mb-2">No reels captured yet</h3>
+              <p className="text-slate-500 text-sm max-w-sm mx-auto">Latest intelligence is being extracted. The dashboard will automatically update once the analysis is complete.</p>
+            </div>
           )}
         </div>
       </div>
 
+      {/* Video Modal Interface - Ambient Immersive Experience */}
       {selectedVideo && (
-        <VideoModal 
-          video={selectedVideo}
-          onClose={() => setSelectedVideo(null)} 
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-500 overflow-hidden">
+          {/* Ambient Blurred Background Layer */}
+          <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+            <video 
+              src={selectedVideo.video_url || selectedVideo.video_versions?.[0]?.url || selectedVideo.media_url} 
+              autoPlay 
+              muted 
+              loop 
+              playsInline
+              className="w-full h-full object-cover opacity-40 blur-[100px] scale-[1.2] transition-opacity duration-1000"
+            />
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+          </div>
+
+          <div 
+            className="absolute inset-x-0 inset-y-0 z-10"
+            onClick={() => setSelectedVideo(null)}
+          ></div>
+          
+          <div className="relative z-20 w-full max-w-[500px] h-[90vh] bg-black rounded-[3.5rem] border border-white/20 shadow-[0_0_120px_rgba(0,0,0,1)] overflow-hidden animate-in zoom-in-95 duration-500 ring-1 ring-white/10">
+            {/* The Cinematic Player */}
+            <div className="w-full h-full relative flex items-center justify-center bg-black">
+              <video 
+                src={selectedVideo.video_url || selectedVideo.video_versions?.[0]?.url || selectedVideo.media_url} 
+                controls={false}
+                autoPlay 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const video = e.currentTarget;
+                  if (video.paused) video.play(); else video.pause();
+                }}
+                className="w-full h-full object-cover relative z-20 cursor-pointer"
+              />
+              
+              {/* Top Profile Overlay - Moved to Top-Left */}
+              <div className="absolute top-8 left-8 z-[110] flex items-center gap-3 bg-black/40 backdrop-blur-3xl px-5 py-3 rounded-full border border-white/10 shadow-2xl">
+                 <img 
+                    src={influencer?.profile_pic ? `https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=50&h=50&fit=cover&mask=circle` : `https://ui-avatars.com/api/?name=${influencer?.username}&background=random`} 
+                    className="w-7 h-7 rounded-full border border-white/10 shadow-xl" 
+                 />
+                 <span className="text-white text-[11px] font-black uppercase tracking-widest">{influencer?.username}</span>
+              </div>
+
+              {/* Top Close Button Node */}
+              <button 
+                onClick={() => setSelectedVideo(null)}
+                className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-2xl rounded-full border border-white/10 text-white transition-all hover:scale-110 active:scale-95 group z-[110]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
-function VideoCard({ video, onClick, isViral = false }) {
-  return (
-    <div
-      onClick={onClick}
-      className="group relative bg-slate-900 border border-white/5 rounded-[2rem] overflow-hidden hover:border-indigo-500/30 transition-all duration-300 cursor-pointer shadow-2xl"
-    >
-      <div className="aspect-[9/16] relative bg-slate-950 flex items-center justify-center overflow-hidden">
-        {/* Top Badges */}
-        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-          {isViral && (
-             <div className="bg-rose-500 text-white text-[8px] font-black tracking-widest uppercase px-3 py-1 rounded-full shadow-lg">
-               🔥 Viral
-             </div>
-          )}
-          <div className="bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-[8px] font-bold text-white/80 uppercase tracking-widest">
-            {video.videoPlayCount?.toLocaleString() || '0'} Views
-          </div>
-        </div>
+// Shared VideoCard component imported from ./VideoCard
 
-        {/* Video / Image */}
-        {video.video_url ? (
-          <video 
-            src={video.video_url} 
-            muted 
-            loop 
-            playsInline
-            onMouseEnter={(e) => {
-              const playPromise = e.currentTarget.play();
-              if (playPromise !== undefined) {
-                playPromise.catch(() => {
-                  // Ignore error: common when hovering out quickly
-                });
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.pause();
-              e.currentTarget.currentTime = 0;
-            }}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-          />
-        ) : video.display_url ? (
-          <img 
-            src={video.display_url} 
-            alt={video.caption || 'Reel thumbnail'} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-          />
-        ) : (
-          <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-            <span className="text-4xl text-slate-800">▶</span>
-          </div>
-        )}
-
-        {/* Bottom Metrics Gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-80"></div>
-
-        {/* Dynamic Likes Badge - Always Visible */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 transition-all whitespace-nowrap z-20">
-          <span className="text-rose-500 text-sm">❤️</span>
-          <span className="text-white text-xs font-bold">{(video.likes || 0).toLocaleString()}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default ProfilePage
+export default ProfilePage;

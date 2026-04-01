@@ -40,5 +40,34 @@
     50% { background-position: 100% center; }
     100% { background-position: 0% center; }
   }
+
+  /* Custom Transitions */
+  .transition-all {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Scrollbar Hide but functional */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Premium Button Helper */
+.btn-premium {
+  @apply relative overflow-hidden transition-all active:scale-[0.98];
+}
+.btn-premium::after {
+  content: '';
+  @apply absolute inset-0 bg-white/10 translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-700;
 }
 

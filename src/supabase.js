@@ -7,13 +7,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const isPlaceholder = (val) => !val || val.includes('YOUR_SUPABASE') || val === 'undefined'
 
 export const supabase = (!isPlaceholder(supabaseUrl) && !isPlaceholder(supabaseAnonKey))
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-      }
-    })
+  ? createClient(supabaseUrl, supabaseAnonKey)
   : null
 
 if (!supabase) {
