@@ -82,11 +82,14 @@ serve(async (req) => {
       if (diffHours < CACHE_EXPIRY_HOURS) {
         
         // Always fetch the latest data from influencers table as requested
-        const { data: influencer } = await supabase
+        let cacheInfluencerQuery = supabase
           .from('influencers')
           .select('*')
-          .eq('username', username)
-          .maybeSingle();
+          .eq('username', username);
+        
+        if (userId) cacheInfluencerQuery = cacheInfluencerQuery.eq('user_id', userId);
+
+        const { data: influencer } = await cacheInfluencerQuery.maybeSingle();
 
         return new Response(JSON.stringify({ 
           success: true, 
@@ -175,71 +178,23 @@ serve(async (req) => {
     // 4. PREPARE Database Updates
     const now = new Date();
     const nowIso = now.toISOString();
-    
-    // Fetch Existing Influencer Id (to link reels)
-    const { data: currentInfluencer } = await supabase
-      .from('influencers')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle();
 
-    const influencerId = currentInfluencer?.id;
-
-    // 5. Save Reels with Sync Tracking (PERSIST FIRST)
-    if (reelPosts.length > 0 && influencerId) {
-      const reelsData = reelPosts.map((p: any) => ({
-        influencer_id: influencerId,
-        reel_url: p.url || p.instagramUrl || `https://www.instagram.com/reels/${p.shortCode || p.id}/`,
-        video_url: p.videoUrl || null,
-        // Correctly store thumbnail image (NOT the video URL)
-        display_url: p.displayUrl || p.thumbnailUrl || p.previewImageUrl || p.imageUrl || null,
-        caption: p.caption || null,
-        views: getViews(p),
-        likes: getLikes(p),
-        user_id: userId, // Ensure userId is passed to reels
-        posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : nowIso,
-        last_synced_at: nowIso
-      }));
-
-      // NOTE: Using reel_url and user_id as unique constraint to avoid duplicates per user
-      await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url,user_id' });
-    }
-
-    // 6. Save Metrics History
-    if (influencerId) {
-      await supabase.from('metrics_history').insert({
-        influencer_id: influencerId,
-        followers: raw.followersCount || 0,
-        following: raw.followsCount || 0,
-        total_posts: raw.postsCount || 0,
-        likes: avgLikes,
-        views: avgViews,
-        captured_at: nowIso
-      });
-    }
-
-    // 7. Update Influencer Master Table (FINAL TRIGGER FOR UI REALTIME)
+    // 5. UPSERT INFLUENCER FIRST — we need the ID to link reels
     const influencerPayload: any = {
       username,
-      profile_pic: raw?.profilePicUrlHD ?? raw?.profilePicUrl,
+      profile_url: `https://www.instagram.com/${username}/`,
+      profile_pic: raw?.profilePicUrlHD ?? raw?.profilePicUrl ?? null,
       followers_count: raw?.followersCount ?? 0,
       following_count: raw?.followsCount ?? 0,
       posts_count: raw?.postsCount ?? 0,
+      avg_likes: avgLikes,
+      avg_comments: 0,
+      reel_views: avgViews,
       last_updated_at: nowIso,
       last_synced_at: nowIso,
-      last_fetched_at: nowIso,
-      last_checked_at: nowIso,
-      is_fresh: true,
-      // Backward compatibility columns
-      followers: raw?.followersCount ?? 0,
-      following: raw?.followsCount ?? 0,
-      posts: raw?.postsCount ?? 0,
-      profile_url: `https://www.instagram.com/${username}/`,
-      avg_likes: avgLikes,
-      reel_views: avgViews,
       category_id: finalCategoryId,
       subcategory_id: finalSubcategoryId,
-      user_id: userId // Ensure userId is part of the payload
+      user_id: userId
     };
 
     const { data: influencer, error: infError } = await supabase
@@ -250,19 +205,68 @@ serve(async (req) => {
 
     if (infError) throw infError;
 
-    // 8. Append to Scraper Cache (History Log)
+    const influencerId = influencer.id;
+
+    // 6. Save Reels — now using the confirmed influencerId
+    if (reelPosts.length > 0 && influencerId) {
+      const reelsData = reelPosts.map((p: any) => ({
+        influencer_id: influencerId,
+        owner_username: username,
+        reel_url: p.url || p.instagramUrl || `https://www.instagram.com/reel/${p.shortCode || p.id}/`,
+        video_url: p.videoUrl || null,
+        display_url: p.displayUrl || p.thumbnailUrl || p.previewImageUrl || p.imageUrl || null,
+        caption: p.caption || null,
+        views: getViews(p),
+        likes: getLikes(p),
+        user_id: userId,
+        posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : nowIso,
+        last_synced_at: nowIso
+      }));
+
+      const { error: reelsError } = await supabase
+        .from('reels')
+        .upsert(reelsData, { onConflict: 'reel_url,user_id' });
+
+      if (reelsError) {
+        console.warn('[SCRAPER] Reels upsert warning:', reelsError.message);
+      } else {
+        console.log(`[SCRAPER] Saved ${reelsData.length} reels for ${username}`);
+      }
+    }
+
+    // 7. Save Metrics History
+    if (influencerId) {
+      await supabase.from('metrics_history').insert({
+        influencer_id: influencerId,
+        followers: raw.followersCount || 0,
+        following: raw.followsCount || 0,
+        total_posts: raw.postsCount || 0,
+        likes: avgLikes,
+        views: avgViews,
+        captured_at: nowIso
+      }).then(({ error }) => {
+        if (error) console.warn('[SCRAPER] Metrics history warning:', error.message);
+      });
+    }
+
+
+    // 8. Append to Scraper Cache (Audit Trail)
     const cachePayload = {
       username,
-      fetched_at: nowIso,
-      followers_count: raw?.followersCount ?? 0,
-      following_count: raw?.followsCount ?? 0,
-      posts_count: raw?.postsCount ?? 0,
-      avg_likes: avgLikes,
-      avg_views: avgViews,
-      raw_data: { profile: raw, reels: reelPosts, synced_at: nowIso }
+      last_scraped_at: nowIso,
+      raw_data: { 
+        followers_count: raw?.followersCount ?? 0,
+        following_count: raw?.followsCount ?? 0,
+        posts_count: raw?.postsCount ?? 0,
+        avg_likes: avgLikes,
+        avg_views: avgViews,
+        profile: raw, 
+        reels_count: reelPosts.length,
+        synced_at: nowIso 
+      }
     };
 
-    await supabase.from('scraper_cache').insert(cachePayload);
+    await supabase.from('scraper_cache').upsert(cachePayload, { onConflict: 'username' });
 
     // 8. Trigger Followers Scrape in Background (Automation)
     const baseUrl = Deno.env.get('SUPABASE_URL');

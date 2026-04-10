@@ -45,6 +45,41 @@
     border: 1px solid var(--glass-border);
     box-shadow: var(--card-shadow);
   }
+
+  /* Theme-aware input field — always matches the current theme */
+  .input-field {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #0f172a; /* Force dark text in light mode */
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.2s;
+  }
+  .input-field::placeholder {
+    color: #64748b;
+    opacity: 0.5;
+  }
+  .input-field:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  }
+  .dark .input-field {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+  }
+  .dark .input-field::placeholder {
+    color: #94a3b8;
+  }
+  .dark .input-field:focus {
+    border-color: #6366f1;
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+  }
   
   .glass-hover {
     @apply hover:bg-slate-900/60 hover:border-white/20 transition-all duration-300;

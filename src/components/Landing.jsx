@@ -6,9 +6,9 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-canvas px-6 overflow-hidden relative font-sans transition-colors duration-500">
-      {/* Dynamic Background Elements */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px] animate-pulse"></div>
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-violet-600/10 rounded-full blur-[120px] animate-pulse delay-700"></div>
+      {/* Dynamic Background Elements — pointer-events-none so they never block clicks */}
+      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px] animate-pulse pointer-events-none"></div>
+      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-violet-600/10 rounded-full blur-[120px] animate-pulse delay-700 pointer-events-none"></div>
       
       <div className="relative z-10 text-center space-y-12 max-w-md w-full animate-in fade-in zoom-in duration-1000">
         <div className="space-y-6">
@@ -29,17 +29,17 @@ export default function Landing() {
           </div>
         </div>
 
-        <div className="space-y-4 pt-4">
+        <div className="space-y-4 pt-4 relative z-20">
           <button 
             onClick={() => navigate('/auth?mode=login')}
-            className="w-full py-5 bg-primary text-canvas text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-white/5"
+            className="w-full py-5 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-indigo-500/20 cursor-pointer"
           >
             Sign In
           </button>
           
           <button 
             onClick={() => navigate('/auth?mode=signup')}
-            className="w-full py-5 bg-slate-100 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200 dark:border-white/5 text-primary dark:text-white text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl transition-all hover:bg-slate-200 dark:hover:bg-slate-900 hover:border-indigo-500/30 active:scale-95"
+            className="w-full py-5 bg-slate-100 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200 dark:border-white/5 text-primary dark:text-white text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl transition-all hover:bg-slate-200 dark:hover:bg-slate-900 hover:border-indigo-500/30 active:scale-95 cursor-pointer"
           >
             Create Account
           </button>

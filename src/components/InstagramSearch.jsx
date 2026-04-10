@@ -81,14 +81,15 @@ export default function InstagramSearch({ user, theme, setTheme }) {
         return;
       }
 
-      // STAGE 2: Scrape Full (ONLY IF CHANGED)
-      const fullRes = await scraperService.scrapeFull(trimmedUrl, {
+      // STAGE 2: Scrape Full / Smart Refresh (ONLY IF CHANGED)
+      // Switch from scrapeFull to refreshData to call refresh-instagram-data function in sequence
+      const fullRes = await scraperService.refreshData(trimmedUrl, {
         categoryId: category.id,
         subcategoryId: subcategory?.id,
         userId: user.id
       });
 
-      if (fullRes.success) {
+      if (fullRes.success && fullRes.data) {
         setSyncStatus('Finalizing Intelligence...');
         
         const influencerId = fullRes.data.id;
@@ -97,7 +98,9 @@ export default function InstagramSearch({ user, theme, setTheme }) {
 
         // STAGE 3: AUTOMATIC FOLLOWERS SYNC (Mock)
         try {
-          await scraperService.syncAudience(influencerId, targetUrl);
+          if (influencerId) {
+            await scraperService.syncAudience(influencerId, targetUrl);
+          }
         } catch (followerErr) {
           console.warn('[InstagramSearch] Audience extraction skipped/failed:', followerErr.message);
         }
@@ -109,9 +112,11 @@ export default function InstagramSearch({ user, theme, setTheme }) {
         setRefreshKey(prev => prev + 1);
         
         // Redirect to profile page after sync for better UX
-        setTimeout(() => navigate(`/profile/${influencerId}`), 1000);
+        if (influencerId) {
+          setTimeout(() => navigate(`/profile/${influencerId}`), 1000);
+        }
       } else {
-        throw new Error(fullRes.error || 'Failed to sync profile');
+        throw new Error(fullRes.error || 'Failed to sync profile. Data was unavailable.');
       }
     } catch (err) {
       console.error('[InstagramSearch] Sync workflow failed:', err);
@@ -203,7 +208,7 @@ export default function InstagramSearch({ user, theme, setTheme }) {
             ) : (
               <Link 
                 to="/auth?mode=login"
-                className="px-6 py-2.5 bg-primary dark:bg-white text-canvas dark:text-slate-950 text-[10px] font-black uppercase tracking-[0.3em] rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xl"
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-indigo-500/20 cursor-pointer relative z-30"
               >
                 Sign In
               </Link>

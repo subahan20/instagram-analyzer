@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import VideoCard from './VideoCard'
 import VideoModal from './VideoModal'
+import scraperService from '../services/scraperService'
+import { toast } from 'react-hot-toast'
 
 function ProfilePage({ user, theme, setTheme }) {
   const { id } = useParams()
@@ -13,6 +15,11 @@ function ProfilePage({ user, theme, setTheme }) {
   const [isSyncing, setIsSyncing] = useState(false); // Shows banner while n8n syncs
   const lastSyncedAtRef = useRef(null);              // Tracks last sync timestamp
   const pollIntervalRef = useRef(null);              // Cleanup ref
+
+  // Extract frequently used data from state
+  const influencer = data?.influencer;
+  const metrics = data?.latest_metrics || {};
+  const reels = data?.reels || [];
 
   const stopPolling = () => {
     if (pollIntervalRef.current) {
@@ -88,26 +95,74 @@ function ProfilePage({ user, theme, setTheme }) {
     }
   };
 
+  const handleManualRefresh = async () => {
+    if (!influencer?.username || isSyncing) return;
+    
+    setIsSyncing(true);
+    const loadingToast = toast.loading('Syncing latest Instagram intelligence...');
+    
+    try {
+      console.log('[Profile] Stage 1: Checking versioning at /post...');
+      const checkRes = await scraperService.checkUpdate(influencer.username, { userId: influencer.user_id });
+      
+      console.log('[Profile] Stage 2: Triggering smart refresh at /refresh-instagram-data...');
+      const result = await scraperService.refreshData(influencer.username, {
+        userId: influencer.user_id,
+        categoryId: influencer.category_id,
+        subcategoryId: influencer.subcategory_id
+      });
+      
+      if (result?.success) {
+        toast.success(result.message || 'Intelligence updated successfully!', { id: loadingToast });
+        // Immediately load from DB to show any changes
+        await loadFromDatabase(false);
+      } else {
+        toast.error(result?.error || 'Intelligence check completed with no changes.', { id: loadingToast });
+      }
+    } catch (err) {
+      console.error('[Profile] Refresh error:', err);
+      toast.error('Failed to connect to intelligence engine.', { id: loadingToast });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     loadFromDatabase();
+    
+    // ─── POLL FALLBACK: Every 30s to catch any out-of-sync events ───
+    pollIntervalRef.current = setInterval(() => {
+      console.log('[POLL] Checking for intelligence updates...');
+      loadFromDatabase(false);
+    }, 30000);
+
     return () => stopPolling();
   }, [id]);
 
 
-  // ─── REALTIME: Only react when n8n completes a sync (last_synced_at changes) ───
+  // ─── REALTIME: React when ANY sync for this username completes ───
   useEffect(() => {
+    if (!influencer?.username) return;
+
     const influencersChannel = supabase
-      .channel(`profile-sync-signal-${id}`)
+      .channel(`global-sync-signal-${influencer.username}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'influencers', filter: `id=eq.${id}` },
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'influencers', 
+          filter: `username=eq.${influencer.username}` 
+        },
         (payload) => {
           const old = payload.old || {};
           const next = payload.new || {};
+          
+          console.log('[REALTIME] Update detected for:', influencer.username);
 
-          // ONLY refresh when the automation sync timestamp changes
+          // Refresh when synchronization timestamp changes from ANY row for this username
           if (old.last_synced_at !== next.last_synced_at) {
-            console.log('[REALTIME] n8n sync completed. Loading fresh data from DB...');
+            console.log('[REALTIME] Intelligence sync completed globally. Refreshing...');
             loadFromDatabase(false);
           }
         }
@@ -115,12 +170,10 @@ function ProfilePage({ user, theme, setTheme }) {
       .subscribe();
 
     return () => supabase.removeChannel(influencersChannel);
-  }, [id]);
+  }, [influencer?.username, id]);
 
 
-  const influencer = data?.influencer;
-  const metrics = data?.latest_metrics || {};
-  const reels = data?.reels || [];
+
 
   const { viralReels, recentReels } = useMemo(() => {
     if (reels?.length === 0) return { viralReels: [], recentReels: [] };
@@ -228,7 +281,23 @@ function ProfilePage({ user, theme, setTheme }) {
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <h1 className="text-4xl md:text-6xl font-bold text-primary tracking-tight break-all transition-colors">@{influencer.username}</h1>
+                    <h1 className="text-4xl md:text-6xl font-bold text-primary tracking-tight break-all transition-colors flex items-center gap-4">
+                      @{influencer.username}
+                      <button 
+                        onClick={handleManualRefresh}
+                        disabled={isSyncing}
+                        className={`p-2 rounded-xl transition-all duration-500 ${
+                          isSyncing 
+                            ? 'bg-indigo-500/20 text-indigo-400 animate-spin cursor-not-allowed' 
+                            : 'bg-white/5 text-secondary hover:text-indigo-400 hover:bg-indigo-500/10'
+                        }`}
+                        title="Refresh Intelligence"
+                      >
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </h1>
                   </div>
                   <p className="text-secondary text-sm md:text-base max-w-xl font-medium leading-relaxed italic transition-colors">
                     {influencer.biography || 'No biography available.'}

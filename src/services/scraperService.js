@@ -74,6 +74,26 @@ const scraperService = {
   },
 
   /**
+   * Refresh Intelligence (STAGE 1 & 2 - Managed)
+   * This calls the same background logic as n8n, ensuring visibility in the Network tab.
+   */
+  async refreshData(url, options = {}) {
+    const { data, error } = await supabase.functions.invoke('post', {
+      body: { 
+        action: 'refresh_profile',
+        url: url.trim(), 
+        force: options.force || false, 
+        ...options 
+      },
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      }
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  /**
    * Unified Sync Profile
    */
   async syncProfile(url, userId) {

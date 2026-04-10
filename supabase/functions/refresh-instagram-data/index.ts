@@ -36,7 +36,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey)
     
     const body = await req.json().catch(() => ({}));
-    const { username: inputUsername, url: inputUrl, batch = false, force = true } = body;
+    const { username: inputUsername, url: inputUrl, batch = false, force = true, userId, categoryId, subcategoryId } = body;
     let targetUsername = inputUsername || inputUrl;
     
     if (batch) {
@@ -60,12 +60,16 @@ serve(async (req) => {
         targetUsername = targetUsername.toLowerCase().replace('@', '').trim();
     }
 
-    // 1. Fetch current data
-    const { data: influencer, error: infError } = await supabase
+    // 1. Fetch current data — MUST filter by user_id for isolation
+    let influencerQuery = supabase
       .from('influencers')
       .select('*')
-      .eq('username', targetUsername)
-      .maybeSingle();
+      .eq('username', targetUsername);
+    
+    // If userId is provided, scope to that user for proper isolation
+    if (userId) influencerQuery = influencerQuery.eq('user_id', userId);
+
+    const { data: influencer, error: infError } = await influencerQuery.maybeSingle();
 
     if (infError) throw infError;
     if (!influencer) return new Response(JSON.stringify({ success: false, error: 'Influencer not found' }), { headers: corsHeaders, status: 200 });
@@ -117,18 +121,34 @@ serve(async (req) => {
         ? Math.round(fresh.latestPosts.reduce((sum: number, p: any) => sum + parseNum(p.likesCount || 0), 0) / fresh.latestPosts.length) 
         : 0;
 
+      const nextFollowers = parseNum(fresh.followersCount || 0);
+      const nextPosts = parseNum(fresh.postsCount || 0);
+
       const hasChanged = 
-        influencer.followers_count !== (fresh.followersCount || 0) ||
-        Math.abs(influencer.avg_likes - freshLikes) > 5;
+        influencer.followers_count !== nextFollowers ||
+        influencer.posts_count !== nextPosts ||
+        Math.abs(influencer.avg_likes - freshLikes) > 10;
 
       if (hasChanged) {
+        console.log(`[REFRESH] Change detected for ${targetUsername}: Followers (${influencer.followers_count}->${nextFollowers}), Posts (${influencer.posts_count}->${nextPosts}).`);
         const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
-          body: { url: targetUsername, force: true, userId: influencer.user_id }
+          body: { 
+            url: targetUsername, 
+            force: true, 
+            userId: influencer.user_id,
+            categoryId: influencer.category_id,
+            subcategoryId: influencer.subcategory_id 
+          }
         });
         if (syncError) throw syncError;
-        finalData = fullSyncResult?.data || influencer;
+        if (!fullSyncResult?.success) throw new Error(fullSyncResult?.error || 'Master scrape delegation failed');
+        finalData = fullSyncResult.data || influencer;
       } else {
-        await supabase.from('influencers').update({ last_checked_at: now.toISOString() }).eq('id', influencer.id);
+        console.log(`[REFRESH] No significant changes for ${targetUsername}. Skipping deep scrape.`);
+        await supabase.from('influencers').update({ 
+          last_checked_at: now.toISOString(),
+          is_fresh: true 
+        }).eq('id', influencer.id);
       }
     }
 
@@ -138,12 +158,24 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
-    let msg = error.message || 'Error occurred';
-    if (msg.includes('non-2xx status code')) {
-      msg = `Dependency Error: The internal 'scrape' function is locked or failing. Please deploy 'scrape' with --no-verify-jwt.`;
-    }
+    const msg = error.message || error.toString() || 'An unexpected error occurred in the Intelligence Engine';
     console.error('[REFRESH ERROR]', msg);
-    return new Response(JSON.stringify({ success: false, error: msg }), { 
+    
+    // Check if it's a specific delegation error
+    let status = 200;
+    if (msg.includes('non-2xx status code')) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `Delegation Failure: The 'scrape' motor is unreachable or returned an error. Check if 'scrape' is deployed correctly.`,
+        originalError: msg 
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: msg,
+      details: error.stack 
+    }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
       status: 200 
     });

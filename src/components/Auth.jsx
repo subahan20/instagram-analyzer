@@ -25,6 +25,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
   const [showForgotUsernameModal, setShowForgotUsernameModal] = useState(false);
   const [forgotUsernameEmail, setForgotUsernameEmail] = useState('');
   const [forgotUsernameLoading, setForgotUsernameLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     const m = searchParams.get('mode');
@@ -271,7 +272,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
   };
 
   const handleGoogleSignIn = async () => {
-    setLoading(true);
+    setGoogleLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -286,7 +287,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
       if (error) throw error;
     } catch (err) {
       toast.error(`Google authentication failed: ${err.message}`);
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
 
@@ -319,7 +320,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
               <input
                 type="email"
                 required
-                className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-primary dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-700"
+                className="input-field"
                 placeholder="e.g. name@example.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -334,7 +335,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
             <input
               type="text"
               required
-              className="w-full bg-slate-900 border border-white/5 rounded-2xl py-5 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-700"
+              className="input-field"
               placeholder={mode === 'signup' ? "e.g. subahan.sk20" : "Enter your username or email"}
               value={formData.username}
               onChange={(e) => {
@@ -354,7 +355,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
             <input
               type="password"
               required
-              className="w-full bg-slate-900 border border-white/5 rounded-2xl py-5 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-700"
+              className="input-field"
               placeholder="••••••••"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -364,7 +365,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 <button
                   type="button"
                   onClick={() => setShowForgotUsernameModal(true)}
-                  className="text-[8px] font-black text-slate-600 uppercase tracking-widest hover:text-indigo-400 transition-colors"
+                  className="text-[8px] font-black text-secondary hover:text-indigo-500 uppercase tracking-widest transition-colors"
                 >
                   Forgot Username?
                 </button>
@@ -377,7 +378,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                     }
                     setShowResetModal(true);
                   }}
-                  className="text-[8px] font-black text-slate-600 uppercase tracking-widest hover:text-indigo-400 transition-colors"
+                  className="text-[8px] font-black text-secondary hover:text-indigo-500 uppercase tracking-widest transition-colors"
                 >
                   Forgot Password?
                 </button>
@@ -391,7 +392,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
               <input
                 type="password"
                 required
-                className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl py-5 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-primary dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-700"
+                className="input-field"
                 placeholder="••••••••"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
@@ -403,7 +404,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || googleLoading}
             className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black text-[10px] uppercase tracking-[0.3em] py-4 rounded-2xl transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 active:scale-[0.98] mt-2 relative z-20 cursor-pointer"
           >
             {loading ? 'Processing...' : (mode === 'signup' ? 'Create Account' : 'Sign In')}
@@ -411,26 +412,40 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
 
           <div className="relative py-4">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/5"></div>
+              <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
             </div>
             <div className="relative flex justify-center text-[8px] font-black uppercase tracking-[0.4em]">
-              <span className="bg-canvas dark:bg-slate-950 px-4 text-secondary transition-colors">OR</span>
+              <span 
+                className="px-4 text-slate-500 transition-colors"
+                style={{ backgroundColor: '#ffffff', zIndex: 10 }}
+              >
+                OR
+              </span>
             </div>
           </div>
 
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="w-full bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/5 text-primary dark:text-white font-black text-[9px] uppercase tracking-[0.2em] py-4 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+            disabled={loading || googleLoading}
+            className="w-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white font-black text-[9px] uppercase tracking-[0.2em] py-4 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-sm disabled:opacity-50"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
-            </svg>
-            Sign in with Google
+            {googleLoading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                <span>Processing...</span>
+              </div>
+            ) : (
+              <>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                </svg>
+                Sign in with Google
+              </>
+            )}
           </button>
         </form>
 
@@ -459,8 +474,8 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                   <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 7a4 4 0 110-8 4 4 0 010 8zm10-3h4M18.5 16h4" strokeLinecap="round" />
                 </svg>
               </div>
-              <h2 className="text-xl font-black text-white uppercase tracking-tight">Recover Username</h2>
-              <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em]">Enter your email to receive your username</p>
+              <h2 className="text-xl font-black text-primary uppercase tracking-tight transition-colors">Recover Username</h2>
+              <p className="text-[9px] text-secondary font-black uppercase tracking-[0.2em] transition-colors">Enter your email to receive your username</p>
             </div>
 
             <form onSubmit={handleForgotUsername} className="space-y-4">
@@ -470,7 +485,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                   type="email"
                   required
                   autoFocus
-                  className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-700"
+                  className="input-field"
                   placeholder="e.g. name@example.com"
                   value={forgotUsernameEmail}
                   onChange={(e) => setForgotUsernameEmail(e.target.value)}
@@ -481,7 +496,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 <button
                   type="button"
                   onClick={() => setShowForgotUsernameModal(false)}
-                  className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-black text-[9px] uppercase tracking-[0.2em] rounded-2xl transition-all"
+                  className="flex-1 py-4 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/5 text-primary dark:text-white font-black text-[9px] uppercase tracking-[0.2em] rounded-2xl transition-all"
                 >
                   Cancel
                 </button>
@@ -512,8 +527,8 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                   <path d="M12 15v2m0-8V7m0 0V5m0 2h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" />
                 </svg>
               </div>
-              <h2 className="text-xl font-black text-white uppercase tracking-tight">Recover Password</h2>
-              <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em]">Update your security credentials</p>
+              <h2 className="text-xl font-black text-primary uppercase tracking-tight transition-colors">Recover Password</h2>
+              <p className="text-[9px] text-secondary font-black uppercase tracking-[0.2em] transition-colors">Update your security credentials</p>
             </div>
 
             <form onSubmit={handleResetPassword} className="space-y-4">
@@ -523,7 +538,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                   type="password"
                   required
                   autoFocus
-                  className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-700"
+                  className="input-field"
                   placeholder="••••••••"
                   value={resetData.password}
                   onChange={(e) => setResetData({ ...resetData, password: e.target.value })}
@@ -535,7 +550,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 <input
                   type="password"
                   required
-                  className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-700"
+                  className="input-field"
                   placeholder="••••••••"
                   value={resetData.confirmPassword}
                   onChange={(e) => setResetData({ ...resetData, confirmPassword: e.target.value })}
@@ -546,7 +561,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 <button
                   type="button"
                   onClick={() => setShowResetModal(false)}
-                  className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-black text-[9px] uppercase tracking-[0.2em] rounded-2xl transition-all"
+                  className="flex-1 py-4 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/5 text-primary dark:text-white font-black text-[9px] uppercase tracking-[0.2em] rounded-2xl transition-all"
                 >
                   Cancel
                 </button>
