@@ -84,7 +84,7 @@ serve(async (req) => {
     if (force) {
        console.log(`[SYNC] Force sync for ${targetUsername}`);
        const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
-         body: { url: targetUsername, force: true }
+         body: { url: targetUsername, force: true, userId: influencer.user_id }
        });
        if (syncError) throw syncError;
        finalData = fullSyncResult?.data || influencer;
@@ -123,7 +123,7 @@ serve(async (req) => {
 
       if (hasChanged) {
         const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
-          body: { url: targetUsername, force: true }
+          body: { url: targetUsername, force: true, userId: influencer.user_id }
         });
         if (syncError) throw syncError;
         finalData = fullSyncResult?.data || influencer;

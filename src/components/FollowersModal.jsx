@@ -72,15 +72,15 @@ export default function FollowersModal({ isOpen, onClose, username }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300"
+        className="absolute inset-0 bg-canvas/80 dark:bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300 transition-colors"
         onClick={onClose}
       ></div>
 
       {/* Centered Popup with Rounded Corners */}
-      <div className="relative w-full max-w-sm glass rounded-[2.5rem] border border-white/5 overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl bg-slate-900/90">
-        <div className="p-8 border-b border-white/5 text-center">
-          <h3 className="text-sm font-black text-white uppercase tracking-[0.2em]">Followers Network</h3>
-          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Node: @{username}</p>
+      <div className="relative w-full max-w-sm glass rounded-[2.5rem] border border-slate-200 dark:border-white/5 overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl transition-colors">
+        <div className="p-8 border-b border-slate-200 dark:border-white/5 text-center bg-slate-50 dark:bg-black/20 transition-colors">
+          <h3 className="text-sm font-black text-primary uppercase tracking-[0.2em] transition-colors">Followers Network</h3>
+          <p className="text-[9px] text-secondary font-bold uppercase tracking-widest mt-1 transition-colors">Node: @{username}</p>
         </div>
 
         {/* Scrollable list */}
@@ -88,7 +88,7 @@ export default function FollowersModal({ isOpen, onClose, username }) {
           {state.loading ? (
             <div className="py-20 flex flex-col items-center gap-4">
                <div className="w-8 h-8 border-2 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
-               <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Syncing...</span>
+               <span className="text-[9px] text-secondary font-bold uppercase tracking-widest animate-pulse transition-colors">Syncing...</span>
             </div>
           ) : state.error ? (
             <div className="py-20 text-center text-rose-500 text-[10px] font-black uppercase tracking-widest">
@@ -102,7 +102,7 @@ export default function FollowersModal({ isOpen, onClose, username }) {
                   className="flex items-center gap-4 group hover:bg-white/5 p-2 rounded-2xl transition-all"
                 >
                   {/* Profile Picture (Circle) */}
-                  <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-slate-800 flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-800 flex-shrink-0 transition-colors">
                     {follower.follower_profile_pic ? (
                       <img 
                         src={`https://images.weserv.nl/?url=${encodeURIComponent(follower.follower_profile_pic)}&w=80&h=80&fit=cover&mask=circle`} 
@@ -110,7 +110,7 @@ export default function FollowersModal({ isOpen, onClose, username }) {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-slate-600">
+                      <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-secondary transition-colors">
                         {follower.follower_username?.[0].toUpperCase()}
                       </div>
                     )}
@@ -118,7 +118,7 @@ export default function FollowersModal({ isOpen, onClose, username }) {
 
                   {/* Username Only */}
                   <div className="flex-1 min-w-0">
-                    <span className="block text-xs font-bold text-white tracking-tight truncate">
+                    <span className="block text-xs font-bold text-primary tracking-tight truncate transition-colors">
                       @{follower.follower_username}
                     </span>
                   </div>
@@ -133,10 +133,10 @@ export default function FollowersModal({ isOpen, onClose, username }) {
           )}
         </div>
 
-        <div className="p-6 border-t border-white/5 bg-slate-900/50">
+        <div className="p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/50 transition-colors">
            <button 
              onClick={onClose}
-             className="w-full py-3 bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all"
+             className="w-full py-3 bg-slate-200/50 dark:bg-white/5 hover:bg-slate-300/50 dark:hover:bg-white/10 text-primary dark:text-white text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all"
            >
              Close Terminal
            </button>

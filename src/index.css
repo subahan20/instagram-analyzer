@@ -1,25 +1,49 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Inter:wght@100..900&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
-  --color-brand-indigo: #6366f1;
-  --color-brand-violet: #8b5cf6;
-}
-
 @layer base {
+  :root {
+    --canvas: #f8fafc;
+    --primary: #0f172a;
+    --secondary: #475569;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.05);
+    --card-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark {
+    --canvas: #020617;
+    --primary: #f1f5f9;
+    --secondary: #94a3b8;
+    --glass-bg: rgba(15, 23, 42, 0.5);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+
   body {
-    @apply antialiased text-slate-200 bg-slate-950 font-sans;
-    background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 40%),
-                radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.08), transparent 40%),
-                #020617;
+    @apply antialiased text-primary bg-canvas font-sans transition-colors duration-500;
+    background-image: 
+      radial-gradient(circle at top right, rgba(99, 102, 241, 0.05), transparent 40%),
+      radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.05), transparent 40%);
     min-height: 100vh;
   }
 }
 
+@theme {
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --color-brand-indigo: #6366f1;
+  --color-brand-violet: #8b5cf6;
+  --color-canvas: var(--canvas);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+}
+
 @layer utilities {
   .glass {
-    @apply bg-slate-900/50 backdrop-blur-xl border border-white/10 shadow-2xl;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--card-shadow);
   }
   
   .glass-hover {
@@ -46,7 +70,7 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Scrollbar Hide but functional */
+  /* Scrollbar Visibility */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
@@ -54,11 +78,11 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(99, 102, 241, 0.4);
     border-radius: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(99, 102, 241, 0.7);
   }
 }
 

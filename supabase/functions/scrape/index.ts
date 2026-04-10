@@ -22,7 +22,7 @@ serve(async (req) => {
     const CACHE_EXPIRY_HOURS = parseInt(Deno.env.get('SCRAPER_CACHE_EXPIRY') || '24');
 
     const body = await req.json().catch(() => ({}));
-    let { url, force = false, categoryId = null, subcategoryId = null } = body;
+    let { url, force = false, categoryId = null, subcategoryId = null, userId = null } = body;
 
     if (!url) {
       const requestUrl = new URL(req.url);
@@ -60,6 +60,7 @@ serve(async (req) => {
       .from('influencers')
       .select('category_id, subcategory_id')
       .eq('username', username)
+      .eq('user_id', userId) // User-specific preservation
       .maybeSingle();
 
     // Preserve existing IDs if not provided in body
@@ -195,12 +196,13 @@ serve(async (req) => {
         caption: p.caption || null,
         views: getViews(p),
         likes: getLikes(p),
+        user_id: userId, // Ensure userId is passed to reels
         posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : nowIso,
         last_synced_at: nowIso
       }));
 
-      // NOTE: Using reel_url as unique constraint to avoid duplicates
-      await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url' });
+      // NOTE: Using reel_url and user_id as unique constraint to avoid duplicates per user
+      await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url,user_id' });
     }
 
     // 6. Save Metrics History
@@ -236,12 +238,13 @@ serve(async (req) => {
       avg_likes: avgLikes,
       reel_views: avgViews,
       category_id: finalCategoryId,
-      subcategory_id: finalSubcategoryId
+      subcategory_id: finalSubcategoryId,
+      user_id: userId // Ensure userId is part of the payload
     };
 
     const { data: influencer, error: infError } = await supabase
       .from('influencers')
-      .upsert(influencerPayload, { onConflict: 'username' })
+      .upsert(influencerPayload, { onConflict: 'username,user_id' })
       .select()
       .single();
 

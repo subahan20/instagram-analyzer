@@ -88,7 +88,7 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
 
   // Determine what to render in the card
   const renderMedia = () => {
-    if (!isInView) return <div className="w-full h-full bg-slate-900 animate-pulse" />;
+    if (!isInView) return <div className="w-full h-full bg-slate-300 dark:bg-slate-900 animate-pulse" />;
 
     // 1. Try video player
     if (resolvedVideoSrc && !videoError) {
@@ -136,9 +136,9 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
 
     // 4. No media at all — show placeholder with link
     return (
-      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center gap-3">
+      <div className="w-full h-full bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-3 transition-colors">
         <span className="text-4xl opacity-20">🎞️</span>
-        <span className="text-[10px] font-black text-slate-700 uppercase tracking-[0.2em]">No Preview</span>
+        <span className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] transition-colors">No Preview</span>
         {reel_url && (
           <a
             href={reel_url}
@@ -165,9 +165,9 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
           videoRef.current.currentTime = 0;
         }
       }}
-      className="group relative bg-[#0a0f1e] border border-white/5 rounded-[3rem] overflow-hidden hover:border-indigo-500/40 transition-all duration-700 hover:shadow-[0_0_50px_rgba(99,102,241,0.15)] flex flex-col cursor-pointer"
+      className="group relative bg-canvas dark:bg-[#0a0f1e] border border-slate-200 dark:border-white/5 rounded-[3rem] overflow-hidden hover:border-indigo-500/40 transition-all duration-700 hover:shadow-[0_0_50px_rgba(99,102,241,0.15)] flex flex-col cursor-pointer"
     >
-      <div className="aspect-[9/16] relative bg-black flex items-center justify-center overflow-hidden">
+      <div className="aspect-[9/16] relative bg-slate-100 dark:bg-black flex items-center justify-center overflow-hidden transition-colors">
         {/* Top Badges */}
         <div className="absolute top-5 left-5 right-5 z-30 flex justify-between items-start pointer-events-none">
           <div className="flex flex-col gap-2">

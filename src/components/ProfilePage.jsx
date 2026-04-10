@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import VideoCard from './VideoCard'
+import VideoModal from './VideoModal'
 
-function ProfilePage({ user }) {
+function ProfilePage({ user, theme, setTheme }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const [data, setData] = useState(null)
@@ -39,15 +40,44 @@ function ProfilePage({ user }) {
       // Record sync timestamp so Realtime knows baseline
       lastSyncedAtRef.current = influencer.last_synced_at;
 
-      // Read reels and latest metrics in parallel
+      // 1. Find all 'influencer' record IDs for this same username across ALL users
+      // This allows us to gather reels synced by anyone.
+      const { data: siblingInfluencers } = await supabase
+        .from('influencers')
+        .select('id')
+        .ilike('username', influencer.username);
+      
+      const influencerIds = siblingInfluencers?.map(s => s.id) || [influencer.id];
+
+      // 2. Read reels (globally) and latest metrics (specifically for this user's view)
+      // We use both 'influencer_id' and 'owner_username' to ensure 100% coverage
+      // regardless of which user account originally performed the sync.
       const [reelsRes, metricsRes] = await Promise.all([
-        supabase.from('reels').select('*').eq('influencer_id', influencer.id).order('posted_at', { ascending: false }),
-        supabase.from('metrics_history').select('*').eq('influencer_id', influencer.id).order('captured_at', { ascending: false }).limit(1).maybeSingle()
+        supabase
+          .from('reels')
+          .select('*')
+          .or(`influencer_id.in.(${influencerIds.join(',')}),owner_username.ilike.${influencer.username}`)
+          .order('posted_at', { ascending: false }),
+        supabase
+          .from('metrics_history')
+          .select('*')
+          .eq('influencer_id', influencer.id)
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
       ]);
+
+      // 3. Deduplicate reels by URL (essential for shared platforms)
+      const seenUrls = new Set();
+      const uniqueReels = (reelsRes.data || []).filter(r => {
+        if (!r.reel_url || seenUrls.has(r.reel_url)) return false;
+        seenUrls.add(r.reel_url);
+        return true;
+      });
 
       setData({
         influencer,
-        reels: reelsRes.data || [],
+        reels: uniqueReels,
         latest_metrics: metricsRes.data || null,
         followers_list: []
       });
@@ -76,12 +106,9 @@ function ProfilePage({ user }) {
           const next = payload.new || {};
 
           // ONLY refresh when the automation sync timestamp changes
-          // This fires ONLY when n8n completes a scrape — not on page load, tab switch, etc.
           if (old.last_synced_at !== next.last_synced_at) {
             console.log('[REALTIME] n8n sync completed. Loading fresh data from DB...');
             loadFromDatabase(false);
-          } else {
-            console.log('[REALTIME] Ignoring non-sync update.');
           }
         }
       )
@@ -97,11 +124,22 @@ function ProfilePage({ user }) {
 
   const { viralReels, recentReels } = useMemo(() => {
     if (reels?.length === 0) return { viralReels: [], recentReels: [] };
+
+    const influencerUsername = (influencer?.username || '').toLowerCase().replace('@', '');
+    const isPrivate = influencer?.is_private;
+
+    // --- ACCURACY BLOCK: Determine privacy scope ---
+    // If account is PRIVATE: Only show reels owned by this person (hide tagged reels).
+    // If account is PUBLIC: Show all captured content (including tagged).
+    const scopeReels = isPrivate 
+      ? reels.filter(r => (r.owner_username || '').toLowerCase().replace('@', '') === influencerUsername)
+      : reels;
+
     const getViews = (r) => Number(r?.video_play_count || r?.videoPlayCount || r?.play_count || r?.views || 0);
-    const viral = [...reels].filter(r => getViews(r) >= 100).sort((a, b) => getViews(b) - getViews(a)).slice(0, 6);
-    const recent = [...reels].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
+    const viral = [...scopeReels].filter(r => getViews(r) >= 100).sort((a, b) => getViews(b) - getViews(a)).slice(0, 6);
+    const recent = [...scopeReels].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
     return { viralReels: viral, recentReels: recent };
-  }, [reels]);
+  }, [reels, influencer]);
 
   const handleVideoClick = (reel) => {
     setSelectedVideo(reel);
@@ -128,7 +166,7 @@ function ProfilePage({ user }) {
   const profilePic = influencer?.profile_pic || influencer?.profile_pic_url || influencer?.profilePicUrl;
 
   return (
-    <div className="relative min-h-screen bg-slate-950">
+    <div className="relative min-h-screen bg-canvas transition-colors duration-500">
       <div 
         className="fixed inset-0 z-0 pointer-events-none"
         style={{ 
@@ -139,7 +177,7 @@ function ProfilePage({ user }) {
           opacity: 0.5
         }}
       >
-        <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px]"></div>
+        <div className="absolute inset-0 bg-white/20 dark:bg-slate-950/70 backdrop-blur-[1px] transition-colors duration-500"></div>
       </div>
 
       {/* SYNCING BANNER: Shown while polling for fresh data */}
@@ -151,17 +189,17 @@ function ProfilePage({ user }) {
       )}
 
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-12">
-        <div className="mb-12">
-          <Link 
-            to="/" 
-            className="inline-flex items-center gap-2 group text-slate-500 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span className="font-bold text-sm tracking-wider uppercase">Dashboard</span>
-          </Link>
-        </div>
+          <div className="flex items-center justify-between gap-4 mb-8">
+            <Link 
+              to="/" 
+              className="inline-flex items-center gap-2 group text-secondary hover:text-primary transition-colors"
+            >
+              <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span className="font-bold text-sm tracking-wider uppercase">Dashboard</span>
+            </Link>
+          </div>
 
         {influencer && (
           <div className="glass rounded-[3rem] p-8 md:p-12 mb-16 relative overflow-hidden group">
@@ -190,9 +228,9 @@ function ProfilePage({ user }) {
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight break-all">@{influencer.username}</h1>
+                    <h1 className="text-4xl md:text-6xl font-bold text-primary tracking-tight break-all transition-colors">@{influencer.username}</h1>
                   </div>
-                  <p className="text-slate-400 text-sm md:text-base max-w-xl font-medium leading-relaxed italic">
+                  <p className="text-secondary text-sm md:text-base max-w-xl font-medium leading-relaxed italic transition-colors">
                     {influencer.biography || 'No biography available.'}
                   </p>
                 </div>
@@ -206,8 +244,8 @@ function ProfilePage({ user }) {
                     { label: 'Reels', value: influencer.posts_count || influencer.posts }
                   ].map((stat, i) => (
                     <div key={i} className="glass px-5 py-4 rounded-2xl text-center hover:bg-white/5 transition-colors border-white/5 shadow-xl min-w-[100px]">
-                      <div className="text-lg md:text-xl font-bold text-white tracking-tight">{stat.value?.toLocaleString() || '0'}</div>
-                      <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1 font-bold">{stat.label}</div>
+                      <div className="text-lg md:text-xl font-bold text-primary tracking-tight transition-colors">{stat.value?.toLocaleString() || '0'}</div>
+                      <div className="text-[9px] text-secondary uppercase tracking-widest mt-1 font-bold transition-colors">{stat.label}</div>
                     </div>
                   ))}
                 </div>
@@ -225,8 +263,8 @@ function ProfilePage({ user }) {
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-8 bg-gradient-to-b from-rose-500 to-orange-500 rounded-full shadow-[0_0_15px_rgba(244,63,94,0.5)]"></div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase leading-none">Viral <span className="bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Hits</span></h2>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-2">Highest performing intelligence</p>
+                    <h2 className="text-2xl font-bold text-primary tracking-tight uppercase leading-none transition-colors">Viral <span className="bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Hits</span></h2>
+                    <p className="text-[10px] text-secondary font-bold uppercase tracking-[0.2em] mt-2 transition-colors">Highest performing intelligence</p>
                   </div>
                 </div>
                 <div className="px-4 py-2 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
@@ -277,72 +315,22 @@ function ProfilePage({ user }) {
           )}
 
           {viralReels.length === 0 && recentReels.length === 0 && (
-            <div className="py-32 text-center glass rounded-[3rem] border-white/5">
+            <div className="py-32 text-center glass rounded-[3rem] border-slate-200 dark:border-white/5 transition-colors">
               <div className="text-6xl mb-6 opacity-20">🎞️</div>
-              <h3 className="text-xl font-bold text-white mb-2">No reels captured yet</h3>
-              <p className="text-slate-500 text-sm max-w-sm mx-auto">Latest intelligence is being extracted. The dashboard will automatically update once the analysis is complete.</p>
+              <h3 className="text-xl font-bold text-primary mb-2 transition-colors">No reels captured yet</h3>
+              <p className="text-secondary text-sm max-w-sm mx-auto transition-colors">Latest intelligence is being extracted. The dashboard will automatically update once the analysis is complete.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Video Modal Interface - Ambient Immersive Experience */}
+      {/* Modular Video Modal Interface */}
       {selectedVideo && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-500 overflow-hidden">
-          {/* Ambient Blurred Background Layer */}
-          <div className="absolute inset-0 z-0 overflow-hidden bg-black">
-            <video 
-              src={selectedVideo.video_url || selectedVideo.video_versions?.[0]?.url || selectedVideo.media_url} 
-              autoPlay 
-              muted 
-              loop 
-              playsInline
-              className="w-full h-full object-cover opacity-40 blur-[100px] scale-[1.2] transition-opacity duration-1000"
-            />
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-          </div>
-
-          <div 
-            className="absolute inset-x-0 inset-y-0 z-10"
-            onClick={() => setSelectedVideo(null)}
-          ></div>
-          
-          <div className="relative z-20 w-full max-w-[500px] h-[90vh] bg-black rounded-[3.5rem] border border-white/20 shadow-[0_0_120px_rgba(0,0,0,1)] overflow-hidden animate-in zoom-in-95 duration-500 ring-1 ring-white/10">
-            {/* The Cinematic Player */}
-            <div className="w-full h-full relative flex items-center justify-center bg-black">
-              <video 
-                src={selectedVideo.video_url || selectedVideo.video_versions?.[0]?.url || selectedVideo.media_url} 
-                controls={false}
-                autoPlay 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const video = e.currentTarget;
-                  if (video.paused) video.play(); else video.pause();
-                }}
-                className="w-full h-full object-cover relative z-20 cursor-pointer"
-              />
-              
-              {/* Top Profile Overlay - Moved to Top-Left */}
-              <div className="absolute top-8 left-8 z-[110] flex items-center gap-3 bg-black/40 backdrop-blur-3xl px-5 py-3 rounded-full border border-white/10 shadow-2xl">
-                 <img 
-                    src={influencer?.profile_pic ? `https://images.weserv.nl/?url=${encodeURIComponent(influencer.profile_pic)}&w=50&h=50&fit=cover&mask=circle` : `https://ui-avatars.com/api/?name=${influencer?.username}&background=random`} 
-                    className="w-7 h-7 rounded-full border border-white/10 shadow-xl" 
-                 />
-                 <span className="text-white text-[11px] font-black uppercase tracking-widest">{influencer?.username}</span>
-              </div>
-
-              {/* Top Close Button Node */}
-              <button 
-                onClick={() => setSelectedVideo(null)}
-                className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-2xl rounded-full border border-white/10 text-white transition-all hover:scale-110 active:scale-95 group z-[110]"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
+        <VideoModal 
+          video={selectedVideo} 
+          influencer={data?.influencer} 
+          onClose={() => setSelectedVideo(null)} 
+        />
       )}
     </div>
   )

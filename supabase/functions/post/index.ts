@@ -107,7 +107,8 @@ serve(async (req) => {
           return clean.split('instagram.com/')[1]?.split('/')[0] || 'unknown';
         }
       }
-      return clean.startsWith('@') ? clean.substring(1) : clean.split('/').pop() || 'unknown';
+      const raw = clean.startsWith('@') ? clean.substring(1) : clean.split('/').pop() || 'unknown';
+      return raw.toLowerCase();
     };
 
     // ─── NORMALIZED ACTION ROUTING ───
@@ -133,8 +134,9 @@ serve(async (req) => {
 
         const { data: existing } = await supabase
           .from('influencers')
-          .select('last_updated_at')
+          .select('last_updated_at, user_id')
           .eq('username', username)
+          .eq('user_id', userId)
           .maybeSingle();
 
         if (existing?.last_updated_at) {
@@ -265,9 +267,17 @@ serve(async (req) => {
              } 
            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
-        // Fetch sub-data with standard async/await (NO BUGGY .catch() CALLS)
+        // 1. Find all 'influencer' record IDs for this same username across ALL users
+        const { data: siblingInfluencers } = await supabase
+          .from('influencers')
+          .select('id')
+          .ilike('username', influencer.username);
+        
+        const influencerIds = siblingInfluencers?.map(s => s.id) || [influencer.id];
+
+        // 2. Fetch sub-data with standard async/await
         const [reelsRes, metricsRes, followersRes] = await Promise.all([
-          supabase.from('reels').select('*').eq('influencer_id', influencer.id).order('posted_at', { ascending: false }),
+          supabase.from('reels').select('*').or(`influencer_id.in.(${influencerIds.join(',')}),owner_username.ilike.${influencer.username}`).order('posted_at', { ascending: false }),
           supabase.from('metrics_history').select('*').eq('influencer_id', influencer.id).order('captured_at', { ascending: false }).limit(1).maybeSingle(),
           supabase.from('followers').select('*').eq('influencer_id', influencer.id).order('fetched_at', { ascending: false })
         ]);
@@ -275,11 +285,19 @@ serve(async (req) => {
         if (reelsRes.error) console.warn('[POST] Reels fetch warning:', reelsRes.error.message);
         if (metricsRes.error) console.warn('[POST] Metrics fetch warning:', metricsRes.error.message);
 
+        // 3. Deduplicate reels by URL
+        const seenUrls = new Set();
+        const uniqueReels = (reelsRes.data || []).filter(r => {
+          if (seenUrls.has(r.reel_url)) return false;
+          seenUrls.add(r.reel_url);
+          return true;
+        });
+
         return new Response(JSON.stringify({ 
           success: true, 
           data: { 
             influencer, 
-            reels: reelsRes.data || [], 
+            reels: uniqueReels, 
             latest_metrics: metricsRes.data || null,
             followers_list: followersRes.data || []
           } 
@@ -347,6 +365,7 @@ serve(async (req) => {
           reel_views: reelPosts.length > 0 ? Math.round(reelPosts.reduce((sum: number, p: any) => sum + getViews(p), 0) / reelPosts.length) : 0,
           last_updated_at: now,
           is_fresh: true,
+          is_private: raw?.isPrivate ?? false,
           user_id: userId,
           category_id: categoryId,
           subcategory_id: subcategoryId
@@ -354,7 +373,7 @@ serve(async (req) => {
 
         const { data: influencer, error: infError } = await supabase
           .from('influencers')
-          .upsert(influencerPayload, { onConflict: 'username' })
+          .upsert(influencerPayload, { onConflict: 'username,user_id' })
           .select()
           .single();
         
@@ -373,10 +392,14 @@ serve(async (req) => {
             caption: p.caption || null,
             views: getViews(p),
             likes: getLikes(p),
+            owner_username: p.ownerUsername || p.owner_username || targetUsername,
+            owner_full_name: p.ownerFullName || p.owner_full_name || null,
+            product_type: p.productType || p.product_type || p.type || null,
+            is_pinned: p.isPinned || p.is_pinned || false,
             posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : now,
             user_id: userId
           }));
-          const { error: reelsError } = await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url' });
+          const { error: reelsError } = await supabase.from('reels').upsert(reelsData, { onConflict: 'reel_url,user_id' });
           if (reelsError) {
             console.error(`[POST] Database Insert Error (reels) for ${targetUsername}:`, reelsError);
           } else {
@@ -477,6 +500,191 @@ serve(async (req) => {
         });
       }
 
+      case 'admin_reset_password': {
+        const { email, username, password } = body;
+        if (!password) throw new Error('New password is required');
+        
+        let targetEmail = email;
+        if (!targetEmail && username) {
+          // Resolve email by username if not provided
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('username', username.trim().toLowerCase())
+            .maybeSingle();
+            
+          if (profile) {
+            const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
+            targetEmail = authUser?.user?.email;
+          } else {
+            // Try listing users as fallback
+            const { data: { users } } = await supabase.auth.admin.listUsers();
+            const foundUser = users.find((u: any) => 
+               u.email?.toLowerCase().startsWith(username.trim().toLowerCase() + '@') || 
+               u.user_metadata?.username?.toLowerCase() === username.trim().toLowerCase()
+            );
+            targetEmail = foundUser?.email;
+          }
+        }
+
+        if (!targetEmail) throw new Error('Could not identify user to reset password');
+
+        const { data: { users } } = await supabase.auth.admin.listUsers();
+        const user = users.find((u: any) => u.email?.toLowerCase() === targetEmail.toLowerCase());
+        
+        if (!user) throw new Error('User not found');
+
+        const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { 
+          password,
+          email_confirm: true 
+        });
+
+        if (updateError) throw updateError;
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Password updated successfully'
+        }), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+          status: 200 
+        });
+      }
+
+      case 'admin_forgot_username': {
+        const { email } = body;
+        const genericResponse = { success: true, message: 'If this email exists, you will receive your username.' };
+        
+        if (!email) return new Response(JSON.stringify({ error: 'Email required' }), { status: 400, headers: corsHeaders });
+
+        const cleanEmail = email.trim().toLowerCase();
+
+        try {
+          // --- 🔒 SENIOR SECURITY: Anti-Enumeration & Rate Limiting ---
+          // Note: In a large scale app, use Redis/Upstash for rate limiting.
+          // For now, we move straight to secure lookup.
+          console.log(`[RECOVERY] Request for: ${cleanEmail}`);
+
+          const { data: users, error: searchError } = await supabase.auth.admin.listUsers();
+          if (searchError) throw searchError;
+
+          const targetUser = users.users.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+          
+          if (!targetUser) {
+            console.log(`[RECOVERY] Security Signal: Email not found. Returning generic success.`);
+            return new Response(JSON.stringify(genericResponse), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+          }
+
+          // --- 🔗 IDENTITY LINKING ---
+          const { data: profile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', targetUser.id)
+            .single();
+
+          if (profileErr || !profile?.username) {
+            console.error(`[RECOVERY] Data Integrity Error: Auth user exists but profile missing for ${targetUser.id}`);
+            return new Response(JSON.stringify(genericResponse), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+          }
+
+          const username = profile.username;
+          console.log(`[RECOVERY] Identity Verified: ${username}. Initiating Triple-Relay Dispatch...`);
+
+          const emailHtml = `
+            <div style="font-family: 'Inter', sans-serif; padding: 40px; background-color: #0f172a; color: #f8fafc; border-radius: 16px; max-width: 600px; margin: 20px auto; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #6366f1; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; margin: 0;">Identity Recovery</h1>
+              </div>
+              <p style="color: #94a3b8; font-size: 16px; line-height: 24px; margin-bottom: 24px;">Hello,</p>
+              <p style="color: #94a3b8; font-size: 16px; line-height: 24px; margin-bottom: 32px;">We received a request to recover the username associated with this email address. Your username is:</p>
+              <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.4); padding: 24px; border-radius: 12px; text-align: center; margin-bottom: 32px;">
+                <span style="font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 32px; font-weight: 700; color: #f8fafc; letter-spacing: 0.05em;">${username}</span>
+              </div>
+              <p style="color: #64748b; font-size: 14px; line-height: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 24px;">If you did not request this recovery, you can safely ignore this email. Your account security is our priority.</p>
+              <div style="text-align: center; margin-top: 32px; color: #475569; font-size: 12px;">
+                &copy; 2026 Your App Name. All rights reserved.
+              </div>
+            </div>
+          `;
+
+          let sent = false;
+
+          // 🚛 Node 1: Gmail SMTP (Enhanced Security)
+          const smtpUser = Deno.env.get('SMTP_USER');
+          const smtpPass = Deno.env.get('SMTP_PASS');
+          const resendKey = Deno.env.get('RESEND_API_KEY');
+
+          if (smtpUser && smtpPass) {
+            try {
+              console.log(`[RECOVERY] Attempting SMTP Node (Secure 465)...`);
+              const { default: nodemailer } = await import("npm:nodemailer");
+              const transporter = nodemailer.createTransport({ 
+                host: "smtp.gmail.com",
+                port: 465,
+                secure: true,
+                auth: { user: smtpUser, pass: smtpPass } 
+              });
+              await transporter.sendMail({ 
+                from: `"Identity Hub" <${smtpUser}>`, 
+                to: cleanEmail, 
+                subject: 'Your Username Recovery', 
+                html: emailHtml 
+              });
+              console.log(`[RECOVERY] SMTP SUCCESS ✅`);
+              sent = true;
+            } catch (e) { console.error('[RECOVERY] SMTP NODE FAILED ❌:', e.message || e); }
+          }
+
+          // 🚛 Node 2: Resend API (With Deep Error Reporting)
+          if (!sent && resendKey) {
+            try {
+              console.log(`[RECOVERY] SMTP Failed. Attempting Resend...`);
+              const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from: 'Auth Hub <onboarding@resend.dev>', to: [cleanEmail], subject: 'Your Username', html: emailHtml })
+              });
+              const resBody = await res.text();
+              console.log(`[RECOVERY] Resend Status: ${res.status}`);
+              if (res.ok) {
+                console.log(`[RECOVERY] RESEND SUCCESS ✅`);
+                sent = true;
+              } else {
+                console.error(`[RECOVERY] RESEND ERROR BODY:`, resBody);
+              }
+            } catch (e) { console.error('[RECOVERY] RESEND FATAL ERROR:', e); }
+          }
+
+          // 🚛 Node 3: Apify Fallback (Failsafe)
+          const apifyToken = Deno.env.get('APIFY_API') || Deno.env.get('APIFY_TOKEN');
+          if (!sent && apifyToken) {
+            try {
+              console.log(`[RECOVERY] Resend Failed. Attempting Apify Failsafe...`);
+              const res = await fetch(`https://api.apify.com/v2/acts/apify~send-mail/runs?token=${apifyToken.trim()}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to: cleanEmail, subject: 'Your Account Username Recovery', html: emailHtml })
+              });
+              if (res.ok) {
+                console.log('[RECOVERY] Apify Node Succeeded! ✅');
+                sent = true;
+              } else {
+                console.error('[RECOVERY] Apify Node Failed ❌:', await res.text());
+              }
+            } catch (e) { console.error('[RECOVERY] Apify Node FATAL ❌:', e); }
+          }
+
+          if (!sent) console.error(`[RECOVERY] CRITICAL: All 3 nodes (SMTP, Resend, Apify) failed to deliver to ${cleanEmail}. Check Secrets.`);
+
+        } catch (globalErr) {
+          console.error('[RECOVERY] SYSTEM FATAL:', globalErr);
+        }
+
+        return new Response(JSON.stringify(genericResponse), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+          status: 200 
+        });
+      }
+
       case 'admin_create_user': {
         const { email, password, username } = body;
         
@@ -494,21 +702,46 @@ serve(async (req) => {
         let targetUser = authData?.user;
 
         if (createError) {
-          const isExisting = createError.message.toLowerCase().includes('already registered') || 
-                            createError.message.toLowerCase().includes('already exists');
+          const errMsg = createError.message.toLowerCase();
+          const isExisting = errMsg.includes('already registered') || 
+                            errMsg.includes('already exists') ||
+                            errMsg.includes('email_exists');
           
           if (isExisting) {
-            const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
-            if (!listError) {
-              const existingUser = users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
-              if (existingUser) {
-                targetUser = existingUser;
-                const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, { 
-                  password, 
-                  email_confirm: true 
-                });
-                if (updateError) throw updateError;
-              }
+            console.log(`[POST] User ${email} already registered. Searching...`);
+            
+            // Attempt 1: Standard List (Fastest)
+            const { data: { users: listA } } = await supabase.auth.admin.listUsers();
+            let existingUser = listA?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+            
+            // Attempt 2: Filtered search (More reliable for large sets)
+            if (!existingUser) {
+              const { data: { users: listB } } = await supabase.auth.admin.listUsers({
+                filter: `email=eq.${email.trim().toLowerCase()}`
+              });
+              existingUser = listB?.[0];
+            }
+
+            // Attempt 3: Search by Metadata (In case email is weird)
+            if (!existingUser && username) {
+               const { data: { users: listC } } = await supabase.auth.admin.listUsers();
+               existingUser = listC?.find((u: any) => u.user_metadata?.username?.toLowerCase() === username.toLowerCase());
+            }
+
+            if (existingUser) {
+              targetUser = existingUser;
+              console.log(`[POST] Re-syncing existing user: ${existingUser.id}`);
+              const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, { 
+                password, 
+                email_confirm: true,
+                user_metadata: { username }
+              });
+              if (updateError) throw updateError;
+            } else {
+              // TERMINAL FALLBACK: If we still can't find them, we try to update UNCONDITIONALLY by email if possible
+              // But Supabase Admin doesn't support updateByEmail. 
+              // We throw a clear error with hint.
+              throw new Error(`CRITICAL: User ${email} exists in Auth but is invisible to Admin API. Please check your Supabase dashboard > Authentication > Users.`);
             }
           } else {
             throw createError;

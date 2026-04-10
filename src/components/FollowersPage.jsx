@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import scraperService from '../services/scraperService'
 
-function FollowersPage() {
+function FollowersPage({ theme, setTheme }) {
   const { username } = useParams()
   const navigate = useNavigate()
   const [influencer, setInfluencer] = useState(null)
@@ -89,15 +89,15 @@ function FollowersPage() {
 
   if (loading && !syncing) {
     return (
-      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center transition-colors duration-500">
         <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-        <p className="mt-8 text-indigo-400 font-black uppercase tracking-[0.3em] text-xs">Accessing Social Graph...</p>
+        <p className="mt-8 text-indigo-400 font-black uppercase tracking-[0.3em] text-xs transition-colors">Accessing Social Graph...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-50 selection:bg-indigo-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-canvas text-primary selection:bg-indigo-500/30 overflow-x-hidden transition-colors duration-500">
       {/* Background Glow */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-indigo-500/5 blur-[120px] rounded-full"></div>
@@ -132,17 +132,19 @@ function FollowersPage() {
             </div>
           </div>
         </div>
-        <Link to="/" className="px-4 py-2 glass rounded-xl border border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-400 transition-all">
-          Exit
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="px-4 py-2 glass rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary hover:text-indigo-400 transition-all">
+            Exit
+          </Link>
+        </div>
       </header>
 
       <main className="relative z-10 max-w-xl mx-auto py-12 px-4 h-full">
         {/* Instagram-Style Modal Container */}
-        <div className="bg-[#1e1e1e] rounded-[1.5rem] border border-white/5 shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="bg-canvas dark:bg-[#1e1e1e] rounded-[1.5rem] border border-slate-200 dark:border-white/5 shadow-2xl flex flex-col max-h-[85vh] transition-colors">
           {/* Modal Header with Search */}
-          <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between relative bg-black/20">
-            <h2 className="text-sm font-bold tracking-tight">Followers Intelligence</h2>
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex items-center justify-between relative bg-slate-50 dark:bg-black/20 transition-colors">
+            <h2 className="text-sm font-bold tracking-tight text-primary transition-colors">Followers Intelligence</h2>
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => fetchData(false, true)}
@@ -166,7 +168,7 @@ function FollowersPage() {
             </div>
           </div>
 
-          <div className="px-4 py-3 bg-[#1e1e1e]">
+          <div className="px-4 py-3 bg-slate-100/50 dark:bg-[#1e1e1e] transition-colors border-b border-slate-200 dark:border-white/5">
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,7 +180,7 @@ function FollowersPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search"
-                className="w-full bg-[#262626] border-none text-white text-sm pl-11 pr-4 py-2 rounded-lg outline-none focus:ring-1 ring-white/10 placeholder:text-slate-600 transition-all"
+                className="w-full bg-slate-200/50 dark:bg-[#262626] border border-slate-200 dark:border-none text-primary dark:text-white text-sm pl-11 pr-4 py-2 rounded-lg outline-none focus:ring-1 ring-slate-300 dark:ring-white/10 placeholder:text-slate-500 dark:placeholder:text-slate-600 transition-all"
               />
             </div>
           </div>
@@ -210,7 +212,7 @@ function FollowersPage() {
                             alt={follower.follower_username}
                           />
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-sm font-bold text-slate-700 uppercase">
+                          <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 flex items-center justify-center text-sm font-bold text-secondary uppercase transition-colors">
                             {follower.follower_username[0]}
                           </div>
                         )}
@@ -249,8 +251,8 @@ function FollowersPage() {
         {/* Global Stats Footer */}
         <div className="mt-8 flex items-center justify-between px-8 text-center bg-white/5 py-4 rounded-2xl border border-white/5">
           <div>
-            <div className="text-xl font-black text-white">{influencer?.followers_count?.toLocaleString() || '0'}</div>
-            <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest mt-0.5">Global Reach</div>
+            <div className="text-xl font-black text-primary transition-colors">{influencer?.followers_count?.toLocaleString() || '0'}</div>
+            <div className="text-[9px] text-secondary font-black uppercase tracking-widest mt-0.5 transition-colors">Global Reach</div>
           </div>
           <div className="w-px h-8 bg-white/10"></div>
           <div>

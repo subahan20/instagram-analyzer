@@ -13,6 +13,7 @@
     "start": "N8N_PORT=${PORT:-5678} n8n start"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.4",
     "@supabase/supabase-js": "^2.98.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -25,6 +26,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
+    "react-toastify": "^11.0.5",
     "validator": "^13.15.26",
     "xlsx": "^0.18.5"
   },

@@ -43,7 +43,6 @@ serve(async (req) => {
       
       const followerData = fResults.map((f: any) => ({
         influencer_id: influencer.id,
-        username: username,
         follower_username: f.username,
         follower_profile_pic: f.profilePicUrl,
         fetched_at: now
