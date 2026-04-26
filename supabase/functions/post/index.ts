@@ -576,8 +576,8 @@
               const targetUser = users.users.find((u: any) => u.email?.toLowerCase() === cleanEmail);
               
               if (!targetUser) {
-                console.log(`[RECOVERY] Security Signal: Email not found. Returning generic success.`);
-                return new Response(JSON.stringify(genericResponse), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+                console.log(`[RECOVERY] Security Signal: Email not found. Returning registration hint.`);
+                return new Response(JSON.stringify({ success: false, error: 'Identity not found. Please register an account first.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
               }
 
               // --- 🔗 IDENTITY LINKING ---
@@ -589,7 +589,7 @@
 
               if (profileErr || !profile?.username) {
                 console.error(`[RECOVERY] Data Integrity Error: Auth user exists but profile missing for ${targetUser.id}`);
-                return new Response(JSON.stringify(genericResponse), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+                return new Response(JSON.stringify({ success: false, error: 'No username associated with this identity. Please register again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
               }
 
               const username = profile.username;

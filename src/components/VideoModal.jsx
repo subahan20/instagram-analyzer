@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 /**
  * VideoModal component to display and play Instagram reels.
@@ -29,43 +29,44 @@ export default function VideoModal({ video, onClose }) {
   } = video;
 
   const displayViews = vpc ?? vRaw ?? 0;
-  
-  // Direct video URL detection (prioritize direct MP4/CDN links)
-  const isDirectVideo = !!videoUrl;
+  const [videoFailed, setVideoFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
-  // Extract shortcode if missing
+  // Extract shortcode
   const finalShortcode = shortcode || pageUrl?.split('/').filter(Boolean).pop();
+
+  // Thumbnail from shortcode
+  const thumbUrl = finalShortcode 
+    ? `https://images.weserv.nl/?url=${encodeURIComponent(`https://www.instagram.com/p/${finalShortcode}/media/?size=l`)}&w=600&h=1000&fit=cover` 
+    : null;
+
+  // Embed URL for the iframe
+  const embedUrl = finalShortcode 
+    ? `https://www.instagram.com/reel/${finalShortcode}/embed/` 
+    : null;
 
   return (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-canvas/80 dark:bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-300 transition-colors"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-300"
       onClick={onClose}
     >
       <div 
-        className="relative w-full h-full sm:h-[90vh] sm:max-w-[420px] md:max-w-[450px] lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[560px] sm:aspect-[9/16] bg-black sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex items-center justify-center animate-in zoom-in-95 duration-300"
+        className="relative w-full h-full sm:h-[90vh] sm:max-w-[420px] md:max-w-[450px] lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[560px] sm:aspect-[9/16] bg-black sm:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex items-center justify-center animate-in zoom-in-95 duration-300 border border-white/5"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Overlays: Reel Badge + Caption */}
-        <div className="absolute top-6 left-6 right-16 z-20 flex flex-col gap-4 pointer-events-none">
-          <div className="flex items-center gap-1.5 w-fit bg-slate-900/40 dark:bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-slate-200 dark:border-white/10 transition-colors">
-            <span className="text-xs text-primary dark:text-white transition-colors">▶</span>
-            <span className="text-[10px] font-black tracking-[0.2em] text-primary dark:text-white uppercase transition-colors">Reel</span>
-          </div>
-          
-        </div>
-
-        {/* Close Button */}
+        {/* Close Button — Ultra-clean */}
         <button 
           onClick={onClose}
-          className="absolute top-6 right-6 z-[110] w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-black/40 hover:bg-slate-200 dark:hover:bg-black/60 backdrop-blur-md rounded-full text-primary dark:text-white transition-all border border-slate-200 dark:border-white/20 shadow-xl active:scale-95"
+          className="absolute top-5 right-5 z-[110] w-10 h-10 flex items-center justify-center bg-black/20 hover:bg-black/40 backdrop-blur-xl rounded-full text-white/70 hover:text-white transition-all border border-white/10 shadow-xl active:scale-90 cursor-pointer"
           aria-label="Close modal"
         >
-          <span className="text-xl">✕</span>
+          <span className="text-lg">✕</span>
         </button>
 
-        {/* Video Playback */}
+        {/* Video Content */}
         <div className="w-full h-full relative">
-          {isDirectVideo ? (
+          {/* State 1: Try direct video URL first */}
+          {!videoFailed && videoUrl && !playing ? (
             <video 
               src={videoUrl} 
               className="w-full h-full object-cover" 
@@ -73,48 +74,91 @@ export default function VideoModal({ video, onClose }) {
               autoPlay 
               playsInline
               loop
+              poster={thumbUrl || undefined}
+              onError={() => setVideoFailed(true)}
             />
+          ) : playing && embedUrl ? (
+            /* State 2: Playing — Zoomed iframe to act like 'object-cover' */
+            <div className="w-full h-full overflow-hidden relative bg-black">
+              <iframe
+                src={embedUrl}
+                className="absolute border-none"
+                style={{ 
+                  top: '50%',
+                  left: '50%',
+                  width: '100%',
+                  height: '100%',
+                  minWidth: '200%', /* Higher scaling to ensure cover */
+                  minHeight: '200%',
+                  transform: 'translate(-50%, -50%)',
+                }}
+                allowFullScreen
+                scrolling="no"
+                title="Instagram Reel"
+              />
+            </div>
           ) : (
-            <iframe
-              src={`https://www.instagram.com/p/${finalShortcode}/embed/`}
-              className="w-full h-full border-none scale-105"
-              allowFullScreen={true}
-              scrolling="no"
-              title="Instagram Reel"
-            ></iframe>
+            /* State 3: Thumbnail with play button */
+            <div className="w-full h-full relative">
+              {thumbUrl && (
+                <img
+                  src={thumbUrl}
+                  alt={caption || 'Reel'}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80" />
+
+              {/* Minimal Reel badge */}
+              <div className="absolute top-5 left-5 z-20">
+                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                  <span className="text-[10px] text-white/90 font-bold uppercase tracking-widest">Reel</span>
+                </div>
+              </div>
+
+              {/* Play button */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  onClick={() => setPlaying(true)}
+                  className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-2xl flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all hover:scale-110 cursor-pointer active:scale-95 shadow-2xl group"
+                >
+                  <svg className="w-8 h-8 text-white transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Metrics Overlay (Bottom) */}
-        <div className="absolute bottom-10 left-6 right-6 z-20 flex flex-col gap-4 pointer-events-none">
-          <div className="flex justify-between items-end">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 shadow-lg transition-colors">
-                <span className="text-sm sm:text-lg md:text-xl text-primary dark:text-white transition-colors">▶</span>
-                <span className="text-xs sm:text-base font-black text-primary dark:text-white transition-colors">{displayViews.toLocaleString()}</span>
+        {/* Ultra-Compact Metrics */}
+        <div className="absolute bottom-5 left-5 right-5 z-20 pointer-events-none">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 bg-black/40 backdrop-blur-lg px-2 py-0.5 rounded-md border border-white/5">
+                <span className="text-[9px] text-white/40">▶</span>
+                <span className="text-[9px] font-medium text-white/80">{displayViews.toLocaleString()}</span>
               </div>
-              <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 shadow-lg transition-colors">
-                <span className="text-sm sm:text-lg md:text-xl text-pink-500">❤</span>
-                <span className="text-xs sm:text-base font-black text-primary dark:text-white transition-colors">{(likes || 0).toLocaleString()}</span>
+              <div className="flex items-center gap-1 bg-black/40 backdrop-blur-lg px-2 py-0.5 rounded-md border border-white/5">
+                <span className="text-[9px] text-pink-500/60">♥</span>
+                <span className="text-[9px] font-medium text-white/80">{(likes || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1 bg-black/40 backdrop-blur-lg px-2 py-0.5 rounded-md border border-white/5">
+                <span className="text-[9px] text-white/40">💬</span>
+                <span className="text-[9px] font-medium text-white/80">{(comments || 0).toLocaleString()}</span>
               </div>
             </div>
-            
-            <div className="text-right">
-              <div className="bg-slate-100 dark:bg-black/40 backdrop-blur-md px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 shadow-lg inline-flex items-center gap-2 mb-2 transition-colors">
-                <span className="text-[10px] sm:text-sm text-secondary transition-colors">💬</span>
-                <span className="text-[10px] sm:text-sm font-bold text-primary dark:text-white transition-colors">{(comments || 0).toLocaleString()}</span>
-              </div>
-              <div className="text-[8px] sm:text-[10px] text-secondary font-black uppercase tracking-widest opacity-80 px-2 py-1 bg-slate-100 dark:bg-black/40 rounded-lg w-fit ml-auto transition-colors">
-                {posted_at
-                  ? new Date(posted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'RECENT REEL'}
-              </div>
+            <div className="text-[8px] font-bold text-white/30 uppercase tracking-tighter">
+              {posted_at
+                ? new Date(posted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                : ''}
             </div>
           </div>
         </div>
 
-        {/* Bottom Ambient Gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10"></div>
+        {/* Subtle bottom fade */}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/60 to-transparent pointer-events-none z-10"></div>
       </div>
     </div>
   );

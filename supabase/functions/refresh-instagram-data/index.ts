@@ -36,7 +36,16 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey)
     
     const body = await req.json().catch(() => ({}));
-    const { username: inputUsername, url: inputUrl, batch = false, force = true, userId, categoryId, subcategoryId } = body;
+    // Force must default to false for automation to follow the "Check then Scrape" logic
+    const { 
+      username: inputUsername, 
+      url: inputUrl, 
+      batch = false, 
+      force = false, 
+      userId, 
+      categoryId, 
+      subcategoryId 
+    } = body;
     let targetUsername = inputUsername || inputUrl;
     
     if (batch) {
@@ -60,52 +69,54 @@ serve(async (req) => {
         targetUsername = targetUsername.toLowerCase().replace('@', '').trim();
     }
 
-    // 1. Fetch current data — MUST filter by user_id for isolation
+    // 1. Fetch current data — Pick the most recent one if duplicates exist
     let influencerQuery = supabase
       .from('influencers')
       .select('*')
-      .eq('username', targetUsername);
+      .eq('username', targetUsername)
+      .order('last_synced_at', { ascending: false })
+      .limit(1);
     
     // If userId is provided, scope to that user for proper isolation
     if (userId) influencerQuery = influencerQuery.eq('user_id', userId);
 
-    const { data: influencer, error: infError } = await influencerQuery.maybeSingle();
+    const { data: influencers, error: infError } = await influencerQuery;
 
     if (infError) throw infError;
-    if (!influencer) return new Response(JSON.stringify({ success: false, error: 'Influencer not found' }), { headers: corsHeaders, status: 200 });
+    const influencer = influencers?.[0];
 
-    const cooldown = 10 * 60 * 1000;
-    const now = new Date();
-    const lastChecked = influencer.last_checked_at ? new Date(influencer.last_checked_at) : new Date(0);
-
-    if (now.getTime() - lastChecked.getTime() < cooldown && !force) {
-      return new Response(JSON.stringify({ success: true, source: 'cooldown', data: influencer }), { headers: corsHeaders });
+    if (!influencer) {
+      console.log(`[REFRESH] Influencer '${targetUsername}' not found in DB. Skipping.`);
+      return new Response(JSON.stringify({ success: false, error: 'Influencer not found' }), { headers: corsHeaders, status: 200 });
     }
 
-    let finalData = influencer;
+    // Cooldown removed to ensure live data on every trigger (n8n/UI)
+    // We now rely on the 'Smart Gatekeeper' lightweight check below to save credits.
+    const now = new Date();
 
-    // ─── SYNC EXECUTION ───
-    if (force) {
-       console.log(`[SYNC] Force sync for ${targetUsername}`);
-       const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
-         body: { url: targetUsername, force: true, userId: influencer.user_id }
-       });
-       if (syncError) throw syncError;
-       finalData = fullSyncResult?.data || influencer;
-    } else {
-      // Lightweight check
+    let finalData = influencer;
+    let triggeredDeepSync = false;
+    let wasUpdated = false;
+
+    // ─── SMART ORCHESTRATION ───
+    // If NOT forced, we do a lightweight check first to save Apify credits
+    if (!force) {
+      console.log(`[REFRESH] Performing lightweight check for ${targetUsername}`);
       const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
+      
       const profileResponse = await fetch(profileScraperUrl, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ usernames: [targetUsername], resultsLimit: 1, postsLimit: 3 }) 
       });
 
-      if (!profileResponse.ok) throw new Error(`Apify check failed`);
+      if (!profileResponse.ok) throw new Error(`Lightweight check failed: ${profileResponse.statusText}`);
+      
       const results = await profileResponse.json();
       const fresh = results[0];
-      if (!fresh) throw new Error('Profile not found');
+      if (!fresh) throw new Error('Profile not found during refresh check');
 
+      // Helper to parse numbers
       const parseNum = (val: any) => {
         if (typeof val === 'number') return val;
         if (typeof val !== 'string') return 0;
@@ -117,42 +128,116 @@ serve(async (req) => {
         return numMatch ? Math.round(parseFloat(numMatch[0]) * multiplier) : 0;
       };
 
+      const nextFollowers = parseNum(fresh.followersCount || 0);
+      const nextPosts = parseNum(fresh.postsCount || 0);
       const freshLikes = (fresh.latestPosts || []).length > 0 
         ? Math.round(fresh.latestPosts.reduce((sum: number, p: any) => sum + parseNum(p.likesCount || 0), 0) / fresh.latestPosts.length) 
         : 0;
 
-      const nextFollowers = parseNum(fresh.followersCount || 0);
-      const nextPosts = parseNum(fresh.postsCount || 0);
+      // ─── POST-ID BASED DETECTION (Per Specification) ───
+      const latestPost = fresh.latestPosts?.[0];
+      const latestShortcode = latestPost?.shortCode || latestPost?.url?.split('/').filter(Boolean).pop();
 
-      const hasChanged = 
+      // Check if this specific post already exists in our 'reels' table
+      const { data: existingPost } = await supabase
+        .from('reels')
+        .select('id')
+        .eq('influencer_id', influencer.id)
+        .or(`reel_url.ilike.%/${latestShortcode}/%,reel_url.ilike.%/${latestShortcode}`)
+        .maybeSingle();
+
+      const hasNewPosts = !existingPost && latestShortcode;
+      
+      // Also keep profile change detection as a secondary trigger
+      const statsChanged = 
         influencer.followers_count !== nextFollowers ||
-        influencer.posts_count !== nextPosts ||
-        Math.abs(influencer.avg_likes - freshLikes) > 10;
+        influencer.posts_count !== nextPosts;
 
-      if (hasChanged) {
-        console.log(`[REFRESH] Change detected for ${targetUsername}: Followers (${influencer.followers_count}->${nextFollowers}), Posts (${influencer.posts_count}->${nextPosts}).`);
-        const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
-          body: { 
-            url: targetUsername, 
-            force: true, 
-            userId: influencer.user_id,
-            categoryId: influencer.category_id,
-            subcategoryId: influencer.subcategory_id 
-          }
-        });
-        if (syncError) throw syncError;
-        if (!fullSyncResult?.success) throw new Error(fullSyncResult?.error || 'Master scrape delegation failed');
-        finalData = fullSyncResult.data || influencer;
+      if (hasNewPosts || statsChanged) {
+        console.log(`[REFRESH] New data detected for ${targetUsername}. Requesting deep sync.`);
+        triggeredDeepSync = true;
       } else {
-        console.log(`[REFRESH] No significant changes for ${targetUsername}. Skipping deep scrape.`);
-        await supabase.from('influencers').update({ 
-          last_checked_at: now.toISOString(),
-          is_fresh: true 
-        }).eq('id', influencer.id);
+        console.log(`[REFRESH] Minor or no changes for ${targetUsername}. Updating basic stats only.`);
+        
+        // Even if no "significant" change, we should still update the basic stats we just fetched
+        const { data: updatedData, error: updateError } = await supabase
+          .from('influencers')
+          .update({ 
+            followers_count: nextFollowers,
+            posts_count: nextPosts,
+            avg_likes: freshLikes,
+            last_checked_at: now.toISOString(),
+            is_fresh: true 
+          })
+          .eq('id', influencer.id)
+          .select();
+
+        const updatedInfluencer = updatedData?.[0];
+
+        if (!updateError && updatedInfluencer) {
+          finalData = updatedInfluencer;
+          
+          // ─── NEW: Update recent reels found in the lightweight check ───
+          const latestPosts = fresh.latestPosts || [];
+          if (latestPosts.length > 0) {
+            console.log(`[REFRESH] Updating ${latestPosts.length} recent reels for ${targetUsername}`);
+            
+            for (const post of latestPosts) {
+              const shortcode = post.shortCode || post.url?.split('/').filter(Boolean).pop();
+              if (!shortcode) continue;
+
+              const postViews = parseNum(post.videoPlayCount || post.viewCount || 0);
+              const postLikes = parseNum(post.likesCount || 0);
+
+              // Update the reel in the database if it exists
+              await supabase
+                .from('reels')
+                .update({ 
+                  views: postViews,
+                  likes: postLikes,
+                  last_synced_at: now.toISOString()
+                })
+                .eq('influencer_id', influencer.id)
+                .or(`reel_url.ilike.%/${shortcode}/%,reel_url.ilike.%/${shortcode}`);
+            }
+          }
+          
+          wasUpdated = true;
+        }
       }
+    } else {
+      // Force mode: Go straight to deep scrape
+      console.log(`[REFRESH] Force sync requested for ${targetUsername}`);
+      triggeredDeepSync = true;
     }
 
-    return new Response(JSON.stringify({ success: true, data: finalData, message: 'Sync completed' }), { 
+    // ─── FINAL SYNC EXECUTION (Single Time Only) ───
+    if (triggeredDeepSync) {
+      const { data: fullSyncResult, error: syncError } = await supabase.functions.invoke('scrape', {
+        body: { 
+          url: targetUsername, 
+          force: true, 
+          userId: influencer.user_id,
+          categoryId: influencer.category_id,
+          subcategoryId: influencer.subcategory_id 
+        }
+      });
+      
+      if (syncError) throw syncError;
+      if (!fullSyncResult?.success) throw new Error(fullSyncResult?.error || 'Deep sync failed');
+      
+      console.log(`[REFRESH] Deep sync SUCCESS for ${targetUsername}`);
+      finalData = fullSyncResult.data || influencer;
+      wasUpdated = true;
+    }
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      was_updated: wasUpdated,
+      triggered_deep_sync: triggeredDeepSync,
+      data: finalData, 
+      message: wasUpdated ? 'Data updated via deep sync' : 'Checked: No update required'
+    }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
       status: 200 
     });

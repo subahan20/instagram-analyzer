@@ -16,7 +16,8 @@ const getTimeAgo = (dateString) => {
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInDays < 7) return `${diffInDays}d ago`;
     if (diffInDays < 30) return `${Math.floor(diffInDays / 7)}w ago`;
-    return `${Math.floor(diffInDays / 30)}m ago`;
+    if (diffInDays < 365) return `${Math.floor(diffInDays / 30)}mo ago`;
+    return `${Math.floor(diffInDays / 365)}yr ago`;
   } catch (e) { return ''; }
 };
 
@@ -86,6 +87,32 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
 
   const proxiedThumb = proxyImg(resolvedThumbSrc);
 
+  // Extract shortcode from reel_url for fallback thumbnail
+  const shortcode = reel_url?.split('/').filter(Boolean).pop() || null;
+
+  // Fallback thumbnail from Instagram's public media endpoint via proxy
+  const shortcodeThumb = shortcode 
+    ? `https://images.weserv.nl/?url=${encodeURIComponent(`https://www.instagram.com/p/${shortcode}/media/?size=l`)}&w=500&h=900&fit=cover`
+    : null;
+
+  const [shortcodeImgError, setShortcodeImgError] = useState(false);
+  const [oembedThumb, setOembedThumb] = useState(null);
+  const [oembedTried, setOembedTried] = useState(false);
+
+  // oEmbed fallback — fetch thumbnail from Instagram's public oEmbed endpoint
+  useEffect(() => {
+    if (!reel_url || !imgError || !shortcodeImgError || oembedTried) return;
+    setOembedTried(true);
+    fetch(`https://api.instagram.com/oembed/?url=${encodeURIComponent(reel_url)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.thumbnail_url) {
+          setOembedThumb(proxyImg(data.thumbnail_url));
+        }
+      })
+      .catch(() => {});
+  }, [reel_url, imgError, shortcodeImgError, oembedTried]);
+
   // Determine what to render in the card
   const renderMedia = () => {
     if (!isInView) return <div className="w-full h-full bg-slate-300 dark:bg-slate-900 animate-pulse" />;
@@ -100,14 +127,14 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
           muted
           loop
           playsInline
-          poster={proxiedThumb || undefined}
+          poster={proxiedThumb || shortcodeThumb || undefined}
           onError={() => setVideoError(true)}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms] ease-out"
         />
       );
     }
 
-    // 2. Try thumbnail image
+    // 2. Try original thumbnail image via proxy
     if (proxiedThumb && !imgError) {
       return (
         <img
@@ -120,39 +147,48 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
       );
     }
 
-    // 3. Last resort: Instagram embed iframe for the reel
-    if (reel_url) {
-      const embedUrl = reel_url.replace(/\/$/, '') + '/embed/';
+    // 3. Try shortcode-based thumbnail from Instagram's media endpoint
+    if (shortcodeThumb && !shortcodeImgError) {
       return (
-        <iframe
-          src={embedUrl}
-          className="w-full h-full border-0 pointer-events-none"
-          scrolling="no"
-          allowTransparency
-          title="Instagram Reel"
+        <img
+          src={shortcodeThumb}
+          alt={caption || 'Reel'}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms] ease-out"
+          referrerPolicy="no-referrer"
+          onError={() => setShortcodeImgError(true)}
         />
       );
     }
 
-    // 4. No media at all — show placeholder with link
+    // 4. Try oEmbed thumbnail
+    if (oembedThumb) {
+      return (
+        <img
+          src={oembedThumb}
+          alt={caption || 'Reel'}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms] ease-out"
+          referrerPolicy="no-referrer"
+          onError={() => setOembedThumb(null)}
+        />
+      );
+    }
+
+    // 5. Last resort — play icon overlay on dark background
     return (
-      <div className="w-full h-full bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-3 transition-colors">
-        <span className="text-4xl opacity-20">🎞️</span>
-        <span className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] transition-colors">No Preview</span>
-        {reel_url && (
-          <a
-            href={reel_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-[9px] text-indigo-400/60 hover:text-indigo-400 underline transition-colors"
-          >
-            View on Instagram
-          </a>
-        )}
+      <div className="w-full h-full bg-gradient-to-br from-slate-900 via-[#0d1117] to-slate-900 flex flex-col items-center justify-center gap-3 px-4 relative overflow-hidden">
+        <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/10">
+          <svg className="w-7 h-7 text-white/70 ml-1" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+        </div>
+        <p className="text-white/30 text-[9px] font-bold uppercase tracking-[0.2em]">Tap to view reel</p>
       </div>
     );
   };
+
+
+
+
 
   return (
     <div

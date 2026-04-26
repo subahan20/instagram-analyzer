@@ -97,11 +97,41 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
     setFormData({ email: '', username: '', password: '', confirmPassword: '' });
 
     if (mode === 'signup') {
+      // Username Validation
+      const usernameRegex = /^[a-zA-Z][a-zA-Z0-9]*$/;
+      if (!usernameRegex.test(username)) {
+        if (/^[0-9]/.test(username)) {
+          toast.error('Registration Error: Username must start with a letter');
+        } else {
+          toast.error('Registration Error: Username must contain only letters and numbers');
+        }
+        setLoading(false);
+        return;
+      }
+      if (username.length > 8) {
+        toast.error('Registration Error: Username must not exceed 8 characters');
+        setLoading(false);
+        return;
+      }
+
       if (password !== confirmPassword) {
         toast.error('Please enter valid details: Passwords do not match');
         setLoading(false);
         return;
       }
+
+      // Password Complexity Validation
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[@#$%^&*!])[a-zA-Z].*$/;
+      if (!passwordRegex.test(password)) {
+        if (!/^[a-zA-Z]/.test(password)) {
+          toast.error('Password must start with a letter');
+        } else {
+          toast.error('Password must include uppercase, lowercase, numbers, and symbols (@#$%^&*!)');
+        }
+        setLoading(false);
+        return;
+      }
+
       if (password.length < 6) {
         toast.error('Please enter valid details: Password must be at least 6 characters');
         setLoading(false);
@@ -130,13 +160,14 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
           return;
         }
 
-        toast.error('Please enter valid details');
+        toast.error(`Registration failed: ${msg}`);
         return;
       }
 
-      // Success - Transition to Home as requested
-      toast.success('Identity established. Please access your node.');
-      navigate('/');
+      // Success - Transition to Login as requested
+      toast.success('Identity established. Please enter your credentials to access hub.');
+      setMode('login');
+      setSearchParams({ mode: 'login' });
       setLoading(false);
     } else {
       // Direct Identifier Extraction
@@ -260,7 +291,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
       if (forgotErr || !data?.success) {
         toast.error(forgotErr || data?.error || 'Please enter valid details');
       } else {
-        toast.success('If this email exists, you will receive your username.');
+        toast.success(data?.message || 'Identity recovery initiated. Please check your email.');
         setShowForgotUsernameModal(false);
         setForgotUsernameEmail('');
       }
@@ -268,6 +299,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
       toast.error('Signal disruption. Could not recover identity.');
     } finally {
       setForgotUsernameLoading(false);
+      setForgotUsernameEmail('');
     }
   };
 
@@ -292,35 +324,56 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
   };
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-6 font-sans transition-colors duration-500">
-      <div className="max-w-md w-full glass p-8 rounded-[2.5rem] border border-white/5 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="text-center space-y-2">
+    <div className="h-[100dvh] bg-canvas flex flex-col items-center justify-center px-3 py-2 font-sans transition-colors duration-500 overflow-hidden relative">
+      {/* Persistent Home Navigation Button */}
+      <button 
+        onClick={() => navigate('/')}
+        className="fixed top-6 right-6 sm:top-8 sm:right-8 z-[60] p-3 sm:p-4 glass rounded-2xl text-secondary hover:text-indigo-400 border border-white/5 hover:border-indigo-500/30 transition-all active:scale-95 group shadow-xl cursor-pointer"
+        title="Return to Home Hub"
+      >
+        <svg 
+          className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:scale-110" 
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor" 
+          strokeWidth="2.5"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+      </button>
+
+      <div className="w-full max-w-sm glass px-4 py-3 rounded-[1.25rem] border border-white/5 space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700 relative overflow-hidden">
+        {/* Subtle Decorative Background Glow */}
+        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 blur-[40px] -mr-12 -mt-12 rounded-full pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-violet-500/10 blur-[40px] -ml-12 -mb-12 rounded-full pointer-events-none"></div>
+
+        <div className="text-center space-y-0.5 relative z-10">
           <div 
             onClick={() => navigate('/')}
-            className="w-12 h-12 bg-gradient-to-tr from-indigo-500 to-violet-600 rounded-xl mx-auto flex items-center justify-center shadow-xl shadow-indigo-500/10 mb-4 cursor-pointer hover:scale-110 transition-transform"
+            className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-violet-600 rounded-xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-1 cursor-pointer hover:scale-105 transition-transform active:scale-95 group"
           >
-            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg className="w-4 h-4 text-white transition-transform group-hover:rotate-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
               <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
               <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
             </svg>
           </div>
-          <h2 className="text-2xl font-black text-primary uppercase tracking-tight transition-colors">
-            {mode === 'signup' ? 'Create Account' : 'Sign In'}
+          <h2 className="text-base font-black text-primary uppercase tracking-tight transition-colors">
+            {mode === 'signup' ? 'Access Registry' : 'Neural Login'}
           </h2>
-          <p className="text-[10px] text-secondary font-black uppercase tracking-[0.3em] transition-colors">
-            {mode === 'signup' ? 'Register to start tracking profiles' : 'Enter your details to access hub'}
+          <p className="text-[8px] text-secondary font-black uppercase tracking-[0.2em] transition-colors max-w-[240px] mx-auto">
+            {mode === 'signup' ? 'Initialize your intelligence node' : 'Provide credentials to access hub'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-1.5">
           {mode === 'signup' && (
-            <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
-              <label className="text-[9px] font-black text-secondary uppercase tracking-widest ml-5 transition-colors">Email Address</label>
+            <div className="space-y-0.5 animate-in fade-in slide-in-from-top-2">
+              <label className="text-[8px] font-black text-secondary uppercase tracking-widest ml-4 transition-colors">Email Address</label>
               <input
                 type="email"
                 required
-                className="input-field"
+                className="input-field py-2 px-4 text-xs"
                 placeholder="e.g. name@example.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -328,18 +381,24 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
             </div>
           )}
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-5">
+          <div className="space-y-0.5">
+            <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-4">
               {mode === 'signup' ? 'Username' : 'Username or Email'}
             </label>
             <input
               type="text"
               required
-              className="input-field"
+              className="input-field py-2 px-4 text-xs"
               placeholder={mode === 'signup' ? "e.g. subahan.sk20" : "Enter your username or email"}
               value={formData.username}
               onChange={(e) => {
                 const val = e.target.value;
+                
+                // Real-time Validation for Signup (Feedback on submit only)
+                if (mode === 'signup') {
+                  // We still update the state, but we don't show toasts here to prevent spam
+                }
+
                 setFormData({ 
                   ...formData, 
                   username: val,
@@ -348,20 +407,8 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 });
               }}
             />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-5">Password</label>
-            <input
-              type="password"
-              required
-              className="input-field"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            />
             {mode === 'login' && (
-              <div className="flex justify-between px-2">
+              <div className="flex justify-end px-2">
                 <button
                   type="button"
                   onClick={() => setShowForgotUsernameModal(true)}
@@ -369,6 +416,22 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                 >
                   Forgot Username?
                 </button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-0.5">
+            <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-4">Password</label>
+            <input
+              type="password"
+              required
+              className="input-field py-2 px-4 text-xs"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            />
+            {mode === 'login' && (
+              <div className="flex justify-end px-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -378,7 +441,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
                     }
                     setShowResetModal(true);
                   }}
-                  className="text-[8px] font-black text-secondary hover:text-indigo-500 uppercase tracking-widest transition-colors"
+                  className="text-[8px] font-black text-secondary hover:text-indigo-500 uppercase tracking-widest transition-colors cursor-pointer"
                 >
                   Forgot Password?
                 </button>
@@ -387,12 +450,12 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
           </div>
 
           {mode === 'signup' && (
-            <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-5">Confirm Password</label>
+            <div className="space-y-0.5 animate-in fade-in slide-in-from-top-2">
+              <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-4">Confirm Password</label>
               <input
                 type="password"
                 required
-                className="input-field"
+                className="input-field py-2 px-4 text-xs"
                 placeholder="••••••••"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
@@ -400,24 +463,22 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
             </div>
           )}
 
-
-
           <button
             type="submit"
             disabled={loading || googleLoading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black text-[10px] uppercase tracking-[0.3em] py-4 rounded-2xl transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 active:scale-[0.98] mt-2 relative z-20 cursor-pointer"
+            className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black text-[10px] uppercase tracking-[0.2em] py-2.5 rounded-xl transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 active:scale-[0.98] mt-0.5 relative z-20 cursor-pointer"
           >
             {loading ? 'Processing...' : (mode === 'signup' ? 'Create Account' : 'Sign In')}
           </button>
 
-          <div className="relative py-4">
+          <div className="relative py-1">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
             </div>
-            <div className="relative flex justify-center text-[8px] font-black uppercase tracking-[0.4em]">
+            <div className="relative flex justify-center text-[7px] font-black uppercase tracking-[0.4em]">
               <span 
-                className="px-4 text-slate-500 transition-colors"
-                style={{ backgroundColor: '#ffffff', zIndex: 10 }}
+                className="px-3 text-slate-500 bg-canvas dark:bg-canvas transition-colors"
+                style={{ zIndex: 10 }}
               >
                 OR
               </span>
@@ -428,7 +489,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={loading || googleLoading}
-            className="w-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white font-black text-[9px] uppercase tracking-[0.2em] py-4 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-sm disabled:opacity-50"
+            className="w-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white font-black text-[10px] uppercase tracking-[0.1em] py-2.5 rounded-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-sm disabled:opacity-50 cursor-pointer"
           >
             {googleLoading ? (
               <div className="flex items-center gap-3">
@@ -458,7 +519,7 @@ export default function Auth({ onAuthSuccess, theme, setTheme }) {
               setSearchParams({ mode: newMode });
               // We keep the username to make it easy for the user
             }}
-            className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:text-indigo-400 transition-colors"
+            className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:text-indigo-400 transition-colors cursor-pointer"
           >
             {mode === 'login' ? 'Need an account? Sign up here' : 'Already have an account? Sign in'}
           </button>

@@ -126,6 +126,7 @@ serve(async (req) => {
     };
 
     const getLikes = (p: any) => parseNum(p?.likesCount ?? p?.like_count ?? p?.likes ?? 0);
+    const getComments = (p: any) => parseNum(p?.commentsCount ?? p?.comments_count ?? p?.comments ?? 0);
 
     const profileScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
     const reelsScraperUrl = `https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
@@ -138,6 +139,7 @@ serve(async (req) => {
           directUrls: [`https://www.instagram.com/${username}/`], 
           usernames: [username], 
           resultsLimit: 1,
+          maxPosts: force ? 1000 : 24, // Fetch 1000 posts from grid if forced
           proxyConfiguration: { useApifyProxy: true }
         }) 
       }),
@@ -148,8 +150,8 @@ serve(async (req) => {
           directUrls: [`https://www.instagram.com/${username}/reels/`],
           username: [username], 
           profiles: [username],
-          resultsLimit: 300,
-          maxItems: 300,
+          resultsLimit: force ? 1000 : 300,
+          maxItems: force ? 1000 : 300,
           proxyConfiguration: { useApifyProxy: true }
         }) 
       })
@@ -163,17 +165,35 @@ serve(async (req) => {
 
     let reelsResults = [];
     if (reelsResponse.ok) {
-      reelsResults = await reelsResponse.json();
+      try {
+        reelsResults = await reelsResponse.json();
+      } catch (err) {
+        console.warn('[SCRAPER] Reels fetch failed, continuing with grid posts only.');
+      }
     }
 
-    // Calculate Averages
-    const reelPosts = reelsResults.filter((p: any) => {
-      const type = (p.type || p.product_type || '').toLowerCase();
-      return type === 'video' || type === 'reel' || !!p.videoUrl;
+    // Merge results from both grid and reels tab
+    const combinedResults = [
+      ...(raw?.latestPosts || []),
+      ...(reelsResults || [])
+    ];
+
+    const reelPosts = combinedResults.filter((p: any) => {
+      const type = (p.type || p.product_type || p.typeCount?.type || '').toLowerCase();
+      return type === 'video' || type === 'reel' || !!p.videoUrl || !!p.videoPlayCount;
     });
 
-    const avgLikes = reelPosts.length > 0 ? Math.round(reelPosts.reduce((sum: number, p: any) => sum + getLikes(p), 0) / reelPosts.length) : 0;
-    const avgViews = reelPosts.length > 0 ? Math.round(reelPosts.reduce((sum: number, p: any) => sum + getViews(p), 0) / reelPosts.length) : 0;
+    // Deduplicate by shortcode so we don't process the same video twice if it's in both grid and reels
+    const uniquePostsMap = new Map();
+    reelPosts.forEach(p => {
+      const sc = p.shortCode || p.id || p.url?.split('/').filter(Boolean).pop();
+      if (sc) uniquePostsMap.set(sc, p);
+    });
+    const finalReelPosts = Array.from(uniquePostsMap.values());
+
+    const avgLikes = finalReelPosts.length > 0 ? Math.round(finalReelPosts.reduce((sum: number, p: any) => sum + getLikes(p), 0) / finalReelPosts.length) : 0;
+    const avgViews = finalReelPosts.length > 0 ? Math.round(finalReelPosts.reduce((sum: number, p: any) => sum + getViews(p), 0) / finalReelPosts.length) : 0;
+    const avgComments = finalReelPosts.length > 0 ? Math.round(finalReelPosts.reduce((sum: number, p: any) => sum + getComments(p), 0) / finalReelPosts.length) : 0;
 
     // 4. PREPARE Database Updates
     const now = new Date();
@@ -188,7 +208,7 @@ serve(async (req) => {
       following_count: raw?.followsCount ?? 0,
       posts_count: raw?.postsCount ?? 0,
       avg_likes: avgLikes,
-      avg_comments: 0,
+      avg_comments: avgComments,
       reel_views: avgViews,
       last_updated_at: nowIso,
       last_synced_at: nowIso,
@@ -207,46 +227,111 @@ serve(async (req) => {
 
     const influencerId = influencer.id;
 
-    // 6. Save Reels — now using the confirmed influencerId
-    if (reelPosts.length > 0 && influencerId) {
-      const reelsData = reelPosts.map((p: any) => ({
-        influencer_id: influencerId,
-        owner_username: username,
-        reel_url: p.url || p.instagramUrl || `https://www.instagram.com/reel/${p.shortCode || p.id}/`,
-        video_url: p.videoUrl || null,
-        display_url: p.displayUrl || p.thumbnailUrl || p.previewImageUrl || p.imageUrl || null,
-        caption: p.caption || null,
-        views: getViews(p),
-        likes: getLikes(p),
-        user_id: userId,
-        posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : nowIso,
-        last_synced_at: nowIso
-      }));
+    // 6. Update REELS (Per Request: Update everything including old reels' likes/views)
+    if (finalReelPosts.length > 0 && influencerId) {
+      const allReelsData = finalReelPosts
+        .map((p: any) => {
+          // Normalize URL: Ensure consistent /reel/ format and remove trailing slashes
+          let rawUrl = p.url || p.instagramUrl || `https://www.instagram.com/reel/${p.shortCode || p.id}/`;
+          const shortCode = p.shortCode || p.id || rawUrl.split('/').filter(Boolean).pop();
+          const normalizedUrl = `https://www.instagram.com/reel/${shortCode}/`;
 
+          return {
+            influencer_id: influencerId,
+            owner_username: username,
+            reel_url: normalizedUrl,
+            video_url: p.videoUrl || null,
+            display_url: p.displayUrl || p.thumbnailUrl || p.previewImageUrl || p.imageUrl || null,
+            caption: p.caption || null,
+            views: getViews(p),
+            likes: getLikes(p),
+            comments: getComments(p),
+            user_id: userId,
+            posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : nowIso,
+            last_synced_at: nowIso
+          };
+        });
+
+      console.log(`[SCRAPER] Updating and deduplicating ${allReelsData.length} reels for ${username}...`);
+
+      // 6.5 DEEP DEDUPLICATION: Find and remove old variants (/p/ vs /reel/)
+      try {
+        const { data: existingReels } = await supabase
+          .from('reels')
+          .select('id, reel_url')
+          .eq('influencer_id', influencerId);
+        
+        if (existingReels && existingReels.length > 0) {
+          const toDelete: string[] = [];
+          
+          for (const newReel of allReelsData) {
+            const newShortcode = newReel.reel_url.split('/').filter(Boolean).pop();
+            
+            for (const oldReel of existingReels) {
+              const oldShortcode = oldReel.reel_url.split('/').filter(Boolean).pop();
+              
+              // If it's the same video but the URL string is different (e.g. /p/ vs /reel/)
+              if (newShortcode === oldShortcode && newReel.reel_url !== oldReel.reel_url) {
+                toDelete.push(oldReel.id);
+              }
+            }
+          }
+          
+          if (toDelete.length > 0) {
+            console.log(`[SCRAPER] Found ${toDelete.length} duplicate reel records. Deleting old variants...`);
+            await supabase.from('reels').delete().in('id', toDelete);
+          }
+        }
+      } catch (err) {
+        console.warn('[SCRAPER] Deduplication failed:', err);
+      }
+      
+      // Safe Upsert: Try with comments, fallback if column missing
       const { error: reelsError } = await supabase
         .from('reels')
-        .upsert(reelsData, { onConflict: 'reel_url,user_id' });
+        .upsert(allReelsData, { onConflict: 'reel_url,user_id' });
 
       if (reelsError) {
-        console.warn('[SCRAPER] Reels upsert warning:', reelsError.message);
-      } else {
-        console.log(`[SCRAPER] Saved ${reelsData.length} reels for ${username}`);
+        // Handle PostgREST "Could not find the 'comments' column" error
+        const isMissingColumn = reelsError.message.includes('comments') && 
+                               (reelsError.message.includes('column') || reelsError.message.includes('schema cache'));
+        
+        if (isMissingColumn) {
+          console.log('[SCRAPER] Reels table: "comments" column missing in DB. Retrying without it...');
+          const safeData = allReelsData.map(({ comments, ...rest }) => rest);
+          const { error: retryError } = await supabase
+            .from('reels')
+            .upsert(safeData, { onConflict: 'reel_url,user_id' });
+          if (retryError) console.warn('[SCRAPER] Reels safe-upsert failed:', retryError.message);
+        } else {
+          console.warn('[SCRAPER] Reels update warning:', reelsError.message);
+        }
       }
     }
 
-    // 7. Save Metrics History
+    // 7. Save Metrics History (Resilient Schema Handling)
     if (influencerId) {
-      await supabase.from('metrics_history').insert({
+      const metricsData: any = {
         influencer_id: influencerId,
         followers: raw.followersCount || 0,
         following: raw.followsCount || 0,
         total_posts: raw.postsCount || 0,
-        likes: avgLikes,
-        views: avgViews,
         captured_at: nowIso
-      }).then(({ error }) => {
-        if (error) console.warn('[SCRAPER] Metrics history warning:', error.message);
-      });
+      };
+
+      // Attempt to include likes/views with fallback names if they exist
+      // We wrap this in a separate check to avoid crashing if columns are missing
+      await supabase.from('metrics_history').insert(metricsData).then(({ error }) => {
+        if (error && error.message.includes('column')) {
+           console.log('[SCRAPER] Metrics history: Some columns missing, retrying with basic stats');
+           // Basic stats only fallback
+           return supabase.from('metrics_history').insert({
+             influencer_id: influencerId,
+             followers: metricsData.followers,
+             captured_at: nowIso
+           });
+        }
+      }).catch(err => console.warn('[SCRAPER] Metrics history failed:', err.message));
     }
 
 
