@@ -132,12 +132,18 @@
               });
             }
 
-            const { data: existing } = await supabase
+            let checkQuery = supabase
               .from('influencers')
               .select('last_updated_at, user_id')
-              .eq('username', username)
-              .eq('user_id', userId)
-              .maybeSingle();
+              .eq('username', username);
+            
+            if (userId) {
+              checkQuery = checkQuery.eq('user_id', userId);
+            } else {
+              checkQuery = checkQuery.is('user_id', null);
+            }
+
+            const { data: existing } = await checkQuery.maybeSingle();
 
             if (existing?.last_updated_at) {
               const lastUpdate = new Date(existing.last_updated_at).getTime();

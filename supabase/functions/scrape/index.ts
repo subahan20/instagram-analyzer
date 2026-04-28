@@ -56,12 +56,18 @@ serve(async (req) => {
     if (!username || username === 'unknown') throw new Error("Could not extract valid username from URL");
 
     // 2. Fetch Existing Influencer Metadata (Maintain Categories)
-    const { data: existingInfluencer } = await supabase
+    let existingQuery = supabase
       .from('influencers')
-      .select('category_id, subcategory_id')
-      .eq('username', username)
-      .eq('user_id', userId) // User-specific preservation
-      .maybeSingle();
+      .select('id, category_id, subcategory_id')
+      .eq('username', username);
+    
+    if (userId) {
+      existingQuery = existingQuery.eq('user_id', userId);
+    } else {
+      existingQuery = existingQuery.is('user_id', null);
+    }
+
+    const { data: existingInfluencer } = await existingQuery.maybeSingle();
 
     // Preserve existing IDs if not provided in body
     const finalCategoryId = categoryId ?? existingInfluencer?.category_id ?? null;
@@ -202,11 +208,16 @@ serve(async (req) => {
     // 5. UPSERT INFLUENCER FIRST — we need the ID to link reels
     const influencerPayload: any = {
       username,
+      full_name: raw?.fullName ?? null,
+      profile_pic: null as string | null,
+      bio: raw?.biography ?? null,
       profile_url: `https://www.instagram.com/${username}/`,
-      profile_pic: raw?.profilePicUrlHD ?? raw?.profilePicUrl ?? null,
       followers_count: raw?.followersCount ?? 0,
       following_count: raw?.followsCount ?? 0,
       posts_count: raw?.postsCount ?? 0,
+      is_private: raw?.private ?? false,
+      is_verified: raw?.verified ?? false,
+      external_url: raw?.externalUrl ?? null,
       avg_likes: avgLikes,
       avg_comments: avgComments,
       reel_views: avgViews,
@@ -217,12 +228,57 @@ serve(async (req) => {
       user_id: userId
     };
 
-    const { data: influencer, error: infError } = await supabase
-      .from('influencers')
-      .upsert(influencerPayload, { onConflict: 'username,user_id' })
-      .select()
-      .single();
+    // Attempt to permanentize the profile pic
+    const picUrl = raw?.profilePicUrlHD || raw?.profilePicUrl;
+    if (picUrl) {
+      try {
+        console.log(`[SCRAPER] Extraction tunnel: ${picUrl.substring(0, 50)}...`);
+        // Use a proxy tunnel for the download to bypass IP blocks
+        const tunnelUrl = `https://images.weserv.nl/?url=${encodeURIComponent(picUrl)}&w=200&h=200&fit=cover`;
+        const picResponse = await fetch(tunnelUrl);
+        
+        if (picResponse.ok) {
+          const buffer = await picResponse.arrayBuffer();
+          const uint8 = new Uint8Array(buffer);
+          let binary = "";
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          const base64 = btoa(binary);
+          const contentType = picResponse.headers.get('content-type') || 'image/jpeg';
+          influencerPayload.profile_pic = `data:${contentType};base64,${base64}`;
+          console.log(`[SCRAPER] Successfully extracted and saved profile pic.`);
+        } else {
+          console.warn('[SCRAPER] Extraction tunnel failed, saving raw URL');
+          influencerPayload.profile_pic = picUrl;
+        }
+      } catch (picErr) {
+        console.error('[SCRAPER] Extraction error:', picErr);
+        influencerPayload.profile_pic = picUrl;
+      }
+    }
 
+    // 5. UPDATE OR INSERT INFLUENCER — we need the ID to link reels
+    let influencerResult;
+    
+    if (existingInfluencer?.id) {
+      console.log(`[SCRAPER] Updating existing identity: ${username} (ID: ${existingInfluencer.id})`);
+      influencerResult = await supabase
+        .from('influencers')
+        .update(influencerPayload)
+        .eq('id', existingInfluencer.id)
+        .select()
+        .single();
+    } else {
+      console.log(`[SCRAPER] Creating new identity: ${username}`);
+      influencerResult = await supabase
+        .from('influencers')
+        .insert(influencerPayload)
+        .select()
+        .single();
+    }
+    
+    const { data: influencer, error: infError } = influencerResult;
     if (infError) throw infError;
 
     const influencerId = influencer.id;

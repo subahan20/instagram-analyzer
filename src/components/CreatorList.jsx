@@ -185,14 +185,19 @@ export default function CreatorList({ categoryId, subcategoryId, nameSearch, use
                           <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-full blur-[4px] opacity-0 group-hover/avatar:opacity-20 transition-opacity"></div>
                           {displayAvatar ? (
                             <img 
-                              src={`https://images.weserv.nl/?url=${encodeURIComponent(displayAvatar)}&w=100&h=100&fit=cover&mask=circle`} 
+                              src={displayAvatar.startsWith('data:') 
+                                ? displayAvatar 
+                                : `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(displayAvatar)}`
+                              }
                               alt={username}
                               className="relative w-12 h-12 rounded-full object-cover border border-white/10 group-hover:border-indigo-500/50 transition-colors shadow-lg"
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <div className="relative w-12 h-12 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center text-slate-500 font-bold text-lg">
-                              {username?.[0]?.toUpperCase()}
+                            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 border border-white/20 flex items-center justify-center text-white shadow-lg">
+                              <svg className="w-6 h-6 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
                             </div>
                           )}
                         </div>

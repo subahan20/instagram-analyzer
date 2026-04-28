@@ -231,15 +231,29 @@ function ProfilePage({ user, theme, setTheme }) {
                   <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
                   {profilePic ? (
                     <img 
-                      src={`https://images.weserv.nl/?url=${encodeURIComponent(profilePic)}&w=150&h=150&fit=cover&mask=circle`} 
+                      src={profilePic.startsWith('data:') 
+                        ? profilePic 
+                        : `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(profilePic)}`
+                      }
                       alt={influencer.username}
                       className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full border-2 border-white/10 shadow-2xl object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        // Manual fallback if proxy fails
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
                     />
-                  ) : (
-                    <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-900 border-2 border-white/10 flex items-center justify-center text-4xl font-bold text-slate-700 shadow-2xl">
-                      {influencer.username?.[0]?.toUpperCase() || 'V'}
-                    </div>
-                  )}
+                  ) : null}
+                  <div 
+                    className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 border-2 border-white/20 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/20"
+                    style={{ display: profilePic ? 'none' : 'flex' }}
+                  >
+                    <svg className="w-14 h-14 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
                 </div>
                 
                 <div className="space-y-3 text-center sm:text-left">

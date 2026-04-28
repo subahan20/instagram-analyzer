@@ -4,13 +4,33 @@ import { supabase } from '../supabase';
 import CategorySelector from './CategorySelector';
 import SubcategorySelector from './SubcategorySelector';
 import Navbar from './Navbar';
+import scraperService from '../services/scraperService';
 
 export default function Dashboard({ user, theme, setTheme }) {
   const [influencers, setInfluencers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState(null);
   const [subcategory, setSubcategory] = useState({ name: 'All Subcategories', id: null });
+  const [imgErrors, setImgErrors] = useState({});
   const navigate = useNavigate();
+
+  const handleRefreshAll = async (targetInfluencer = null) => {
+    const target = targetInfluencer || influencers.find(inf => {
+      const lastUpdate = new Date(inf.last_updated_at).getTime();
+      return Date.now() - lastUpdate > 24 * 60 * 60 * 1000;
+    });
+
+    if (target) {
+      console.log(`[SILENT-HEAL] Refreshing: ${target.username}`);
+      try {
+        await scraperService.refreshData(`https://instagram.com/${target.username}`, { force: true, userId: user?.id });
+      } catch (err) {
+        console.error('[SILENT-HEAL] Error:', err);
+      }
+    } else if (!targetInfluencer) {
+      toast.info('All profiles are currently up to date!');
+    }
+  };
 
   useEffect(() => {
     async function fetchInfluencers() {
@@ -20,6 +40,10 @@ export default function Dashboard({ user, theme, setTheme }) {
           .from('influencers')
           .select('*')
           .order('last_updated_at', { ascending: false });
+
+        if (user?.id) {
+          query = query.eq('user_id', user.id);
+        }
 
         if (category?.id) {
           query = query.eq('category_id', category.id);
@@ -31,7 +55,19 @@ export default function Dashboard({ user, theme, setTheme }) {
 
         const { data, error } = await query;
         if (error) throw error;
-        setInfluencers(data || []);
+
+        // Final safety: deduplicate by username if somehow multiple records exist for same user
+        const uniqueInfluencers = [];
+        const seenUsernames = new Set();
+        
+        (data || []).forEach(inf => {
+          if (!seenUsernames.has(inf.username)) {
+            seenUsernames.add(inf.username);
+            uniqueInfluencers.push(inf);
+          }
+        });
+
+        setInfluencers(uniqueInfluencers);
       } catch (err) {
         console.error('Error fetching influencers:', err);
       } finally {
@@ -62,7 +98,22 @@ export default function Dashboard({ user, theme, setTheme }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [category, subcategory]);
+  }, [category, subcategory, user]);
+
+  // Auto-healing: Trigger a SILENT background refresh if images are broken
+  useEffect(() => {
+    if (!loading && influencers.length > 0) {
+      const needsHealing = influencers.find(inf => {
+        const isBroken = imgErrors[inf.id] || !inf.profile_pic || (inf.profile_pic && !inf.profile_pic.startsWith('data:'));
+        const lastUpdate = new Date(inf.last_updated_at).getTime();
+        return isBroken && (Date.now() - lastUpdate > 6 * 60 * 60 * 1000); // 6h threshold
+      });
+      
+      if (needsHealing) {
+        handleRefreshAll(needsHealing);
+      }
+    }
+  }, [loading, influencers, imgErrors]);
 
   return (
     <div className="min-h-screen bg-canvas transition-colors duration-500">
@@ -70,7 +121,14 @@ export default function Dashboard({ user, theme, setTheme }) {
       
       <div className="max-w-[1400px] mx-auto pt-24 sm:pt-32 px-4 sm:px-8 pb-20 space-y-8 sm:space-y-12">
         {/* Header Section: Responsive Column on Mobile, Row on Desktop */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-end gap-6 sm:gap-8 border-b border-slate-200 dark:border-white/5 pb-8">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-8 border-b border-slate-200 dark:border-white/5 pb-8">
+          <div className="flex-1">
+            <h1 className="text-3xl sm:text-4xl font-black text-primary tracking-tighter uppercase italic transition-colors">
+              Intelligence <span className="text-indigo-500">Hub</span>
+            </h1>
+            <p className="text-secondary font-bold uppercase tracking-[0.3em] text-[10px] mt-2 italic opacity-70 transition-colors">Your Personal AI-Driven Influencer Archive</p>
+          </div>
+          
           {/* Neural Filtering Cluster: Forced Row Layout for Mobile/Desktop */}
           <div className="flex flex-row items-center justify-end gap-2 sm:gap-4 w-full lg:w-auto transition-all">
             <div className="flex-1 lg:flex-none lg:min-w-[160px]">
@@ -126,17 +184,26 @@ export default function Dashboard({ user, theme, setTheme }) {
                       <tr key={inf.id} className="hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors group">
                         <td className="px-8 py-5">
                           <div className="flex justify-center">
-                            <div className="relative group-hover:scale-110 transition-transform duration-500 w-12 h-12">
-                              <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-full blur-[4px] opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                              {inf.profile_pic ? (
+                            <div className="relative group/avatar w-14 h-14">
+                              <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-full blur-[6px] opacity-0 group-hover/avatar:opacity-30 transition-opacity"></div>
+                              {inf.profile_pic && !imgErrors[inf.id] ? (
                                 <img 
-                                  src={`https://images.weserv.nl/?url=${encodeURIComponent(inf.profile_pic)}&w=80&h=80&fit=cover&mask=circle`}
-                                  className="relative w-12 h-12 rounded-full border border-white/10 shadow-lg object-cover"
-                                  alt={inf.username}
+                                  src={inf.profile_pic.startsWith('data:') 
+                                    ? inf.profile_pic 
+                                    : `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(inf.profile_pic)}`
+                                  }
+                                  className="relative w-14 h-14 rounded-full border-2 border-white/20 shadow-2xl object-cover"
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  onError={() => {
+                                    setImgErrors(prev => ({ ...prev, [inf.id]: true }));
+                                  }}
                                 />
                               ) : (
-                                <div className="relative w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/10 flex items-center justify-center text-xl font-bold text-secondary transition-colors">
-                                  {inf.username?.[0]?.toUpperCase()}
+                                <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 border-2 border-white/20 flex items-center justify-center text-white shadow-xl shadow-indigo-500/10">
+                                  <svg className="w-7 h-7 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
                                 </div>
                               )}
                             </div>
@@ -148,21 +215,21 @@ export default function Dashboard({ user, theme, setTheme }) {
                             Last Signal: {inf.last_updated_at ? new Date(inf.last_updated_at).toLocaleDateString() : 'Historical'}
                           </div>
                         </td>
-                        <td className="px-8 py-5 text-center">
-                          <span className="text-sm font-black text-primary tracking-widest transition-colors">{(inf.followers_count || 0).toLocaleString()}</span>
-                        </td>
-                        <td className="px-8 py-5 text-center">
-                          <span className="text-sm font-black text-secondary tracking-widest transition-colors">{(inf.following_count || 0).toLocaleString()}</span>
-                        </td>
-                        <td className="px-8 py-5 flex justify-center">
-                          <button 
-                            onClick={() => navigate(`/profile/${inf.id}`)}
-                            className="w-10 h-10 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-xl flex items-center justify-center text-secondary hover:text-indigo-400 hover:border-indigo-500/50 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all shadow-xl active:scale-90 group/btn cursor-pointer"
-                          >
-                            <svg className="w-5 h-5 group-hover/btn:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                              <path d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                          </button>
+                        <td className="px-8 py-5 text-center font-black text-primary text-sm transition-colors">{inf.followers_count?.toLocaleString() || '0'}</td>
+                        <td className="px-8 py-5 text-center font-black text-primary text-sm transition-colors">{inf.following_count?.toLocaleString() || '0'}</td>
+                        <td className="px-8 py-5">
+                          <div className="flex items-center justify-center gap-2">
+
+                            <button 
+                              onClick={() => navigate(`/profile/${inf.id}`)}
+                              className="p-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-indigo-500 hover:text-white transition-all border border-slate-200 dark:border-white/10 group/btn shadow-sm"
+                            >
+                              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

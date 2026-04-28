@@ -31,7 +31,7 @@ const isVideoUrl = (url) => {
 // Wraps an image URL through the weserv proxy to bypass Instagram CORS
 const proxyImg = (url) => {
   if (!url) return null;
-  return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=500&h=900&fit=cover`;
+  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=500&h=900&fit=cover`;
 };
 
 export default function VideoCard({ video, isViral = false, onVideoClick }) {
@@ -92,7 +92,7 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
 
   // Fallback thumbnail from Instagram's public media endpoint via proxy
   const shortcodeThumb = shortcode 
-    ? `https://images.weserv.nl/?url=${encodeURIComponent(`https://www.instagram.com/p/${shortcode}/media/?size=l`)}&w=500&h=900&fit=cover`
+    ? `https://wsrv.nl/?url=${encodeURIComponent(`https://www.instagram.com/p/${shortcode}/media/?size=l`)}&w=500&h=900&fit=cover`
     : null;
 
   const [shortcodeImgError, setShortcodeImgError] = useState(false);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { supabase } from '../supabase';
@@ -23,6 +23,23 @@ export default function InstagramSearch({ user, theme, setTheme }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const navigate = useNavigate();
+
+  // Auto-sync handle for dashboard shortcut
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get('url');
+    const syncParam = params.get('sync');
+    if (urlParam) {
+      setUrl(decodeURIComponent(urlParam));
+      if (syncParam === 'true') {
+        // Short delay to ensure component is ready
+        setTimeout(() => {
+          const btn = document.querySelector('button[disabled="false"]') || document.querySelector('button:not([disabled])');
+          if (btn) btn.click();
+        }, 500);
+      }
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault();
