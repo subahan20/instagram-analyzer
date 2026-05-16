@@ -160,7 +160,6 @@ export default function InstagramSearch({ user, theme, setTheme }) {
                       setSubcategory({ name: 'All Subcategories', id: null });
                     }}
                     showAllOption={true}
-                    showOthers={false}
                     className="px-3 sm:px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest outline-none cursor-pointer glass hover:border-indigo-500/30 transition-all flex items-center text-secondary w-full"
                   />
                 </div>
@@ -169,10 +168,10 @@ export default function InstagramSearch({ user, theme, setTheme }) {
                   <div className="flex-1 min-w-0">
                     <SubcategorySelector 
                       categoryId={category.id}
+                      categoryName={category.name}
                       selectedSubcategory={subcategory}
                       onSubcategoryChange={setSubcategory}
                       showAllOption={true}
-                      showOthers={false}
                       className="px-3 sm:px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest outline-none cursor-pointer glass hover:border-indigo-500/30 transition-all flex items-center text-secondary w-full"
                     />
                   </div>

@@ -231,7 +231,7 @@ export default function VideoCard({ video, isViral = false, onVideoClick }) {
             <span className="text-white text-[11px] font-black tracking-tight">{likes.toLocaleString()}</span>
           </div>
           <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-white/10 shadow-2xl">
-            <span className="text-white text-[10px] font-black tracking-widest">{views.toLocaleString()} PLAYS</span>
+            <span className="text-white text-[10px] font-black tracking-widest">{views.toLocaleString()} Views</span>
           </div>
         </div>
       </div>

@@ -181,7 +181,7 @@ function ProfilePage({ user, theme, setTheme }) {
       : reels;
     const getViews = (r) => Number(r?.video_play_count || r?.videoPlayCount || r?.play_count || r?.views || 0);
     const viral = [...scopeReels].filter(r => getViews(r) >= 100).sort((a, b) => getViews(b) - getViews(a)).slice(0, 6);
-    const recent = [...scopeReels].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
+    const recent = [...scopeReels].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime()).slice(0, 12);
     return { viralReels: viral, recentReels: recent };
   }, [reels, influencer]);
 

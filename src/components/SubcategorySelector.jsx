@@ -1,25 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 
+const ALL_SUBCATEGORIES = [
+  'BuildWithSanny',
+  'AIWithSanny',
+  'Scalebysanny',
+  'n8n WOrkFlow'
+];
+
 export default function SubcategorySelector({ 
   categoryId, 
+  categoryName,
   selectedSubcategory, 
   onSubcategoryChange, 
   className = "", 
-  showAllOption = false,
-  showOthers = true 
+  showAllOption = false
 }) {
   const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [newSubcategory, setNewSubcategory] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  // true = show inline add-input directly (when no subcategories exist)
-  const [showInlineAdd, setShowInlineAdd] = useState(false);
-  const addInputRef = useRef(null);
 
   useEffect(() => {
-    async function fetchSubcategories() {
+    async function initSubcategories() {
       if (!categoryId) {
         setSubcategories([]);
         return;
@@ -30,14 +32,33 @@ export default function SubcategorySelector({
           .from('subcategories')
           .select('*')
           .eq('category_id', categoryId)
-          .order('name');
+          .in('name', ALL_SUBCATEGORIES);
+          
         if (error) throw error;
-        const subList = (data || []).filter(s => s.name !== 'Others');
-        setSubcategories(subList);
-        // Reset UI state on category change
+        
+        let availableSubcategories = data || [];
+        const missingNames = ALL_SUBCATEGORIES.filter(name => !availableSubcategories.find(s => s.name === name));
+        
+        if (missingNames.length > 0) {
+          const { data: inserted, error: insertError } = await supabase
+            .from('subcategories')
+            .insert(missingNames.map(name => ({ category_id: categoryId, name })))
+            .select();
+            
+          if (!insertError && inserted) {
+            availableSubcategories = [...availableSubcategories, ...inserted];
+          }
+        }
+        
+        const sortedSubcategories = ALL_SUBCATEGORIES.map(name => availableSubcategories.find(s => s.name === name)).filter(Boolean);
+        setSubcategories(sortedSubcategories);
+        
+        // Auto-select the first subcategory if none is selected
+        if (sortedSubcategories.length > 0 && (!selectedSubcategory || selectedSubcategory.name === 'All Subcategories')) {
+          onSubcategoryChange(sortedSubcategories[0]);
+        }
+        
         setIsOpen(false);
-        setShowInlineAdd(false);
-        setNewSubcategory('');
       } catch (err) {
         console.error('Error fetching subcategories:', err);
         setSubcategories([]);
@@ -45,95 +66,12 @@ export default function SubcategorySelector({
         setLoading(false);
       }
     }
-    fetchSubcategories();
+    initSubcategories();
   }, [categoryId]);
-
-  // Auto-focus the add input whenever it appears
-  useEffect(() => {
-    if (showInlineAdd && addInputRef.current) {
-      addInputRef.current.focus();
-    }
-  }, [showInlineAdd]);
-
-  const handleAddSubcategory = async () => {
-    const trimmed = newSubcategory.trim();
-    if (!trimmed) return;
-
-    setIsAdding(true);
-    try {
-      const formatted = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-      const { data, error } = await supabase
-        .from('subcategories')
-        .insert([{ category_id: categoryId, name: formatted }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Add to local list and select it
-      setSubcategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-      onSubcategoryChange(data);
-      setShowInlineAdd(false);
-      setIsOpen(false);
-      setNewSubcategory('');
-    } catch (err) {
-      console.error('Error adding subcategory:', err);
-      alert('Failed to add subcategory. It might already exist.');
-    } finally {
-      setIsAdding(false);
-    }
-  };
 
   const baseSelectClass = "w-full bg-canvas/40 border border-slate-400/20 dark:border-slate-800/50 hover:border-indigo-500/30 text-primary px-6 py-4 rounded-2xl outline-none transition-all font-semibold text-sm glass flex items-center justify-between cursor-pointer group min-h-[56px]";
 
   if (!categoryId) return null;
-
-  // ── Inline "Add Subcategory" input (shown when no subcategories or user clicks +)
-  if (showInlineAdd) {
-    return (
-      <div className="relative w-full animate-in fade-in slide-in-from-top-4 duration-500">
-        <div className="flex items-center bg-canvas dark:bg-slate-900/80 rounded-2xl p-1.5 gap-2 border border-indigo-500/40 shadow-lg animate-in fade-in zoom-in-95 duration-300 min-h-[56px] w-full">
-          <div className="flex-none pl-3">
-            <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <input
-            ref={addInputRef}
-            type="text"
-            placeholder="Type subcategory name..."
-            value={newSubcategory}
-            onChange={(e) => setNewSubcategory(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAddSubcategory();
-              if (e.key === 'Escape') { setShowInlineAdd(false); setNewSubcategory(''); }
-            }}
-            className="flex-1 bg-transparent text-primary px-2 outline-none font-bold text-sm min-w-0 placeholder:text-slate-400 dark:placeholder:text-slate-600"
-          />
-          <div className="flex gap-1">
-            <button
-              onClick={() => { setShowInlineAdd(false); setNewSubcategory(''); }}
-              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
-              title="Cancel"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <button
-              onClick={handleAddSubcategory}
-              disabled={isAdding || !newSubcategory.trim()}
-              className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-30 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-500/20 whitespace-nowrap cursor-pointer"
-            >
-              {isAdding ? (
-                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : 'Save'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="relative w-full animate-in fade-in slide-in-from-top-4 duration-500">
@@ -147,10 +85,10 @@ export default function SubcategorySelector({
           <span className="truncate text-primary transition-colors">
             {loading
               ? 'Fetching...'
-              : selectedSubcategory
-                ? selectedSubcategory.name.charAt(0).toUpperCase() + selectedSubcategory.name.slice(1)
+              : selectedSubcategory && selectedSubcategory.name !== 'All Subcategories'
+                ? selectedSubcategory.name
                 : subcategories.length === 0
-                  ? '+ Add Subcategory'
+                  ? 'No Subcategories'
                   : 'Select a Subcategory'}
           </span>
         </div>
@@ -189,36 +127,9 @@ export default function SubcategorySelector({
                 className="px-6 py-3.5 hover:bg-slate-50 dark:hover:bg-indigo-500/10 cursor-pointer text-sm font-bold text-secondary hover:text-primary transition-colors"
                 onClick={() => { onSubcategoryChange(sub); setIsOpen(false); }}
               >
-                {sub.name.charAt(0).toUpperCase() + sub.name.slice(1)}
+                {sub.name}
               </div>
             ))}
-
-            {/* No subcategories: prompt to add */}
-            {subcategories.length === 0 && !loading && (
-              <div
-                className="px-6 py-5 text-center cursor-pointer group"
-                onClick={() => { setIsOpen(false); setShowInlineAdd(true); }}
-              >
-                <p className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-1">
-                  No subcategories yet
-                </p>
-                <p className="text-indigo-400 text-sm font-black group-hover:text-indigo-300 transition-colors">
-                  + Add First Subcategory
-                </p>
-              </div>
-            )}
-
-            {/* Always visible "Add New" at bottom when subcategories exist */}
-            {subcategories.length > 0 && (
-              <div
-                className="px-6 py-3.5 hover:bg-indigo-500/10 cursor-pointer text-sm font-black text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/5 border-t border-slate-100 dark:border-white/5 group"
-                onClick={() => { setIsOpen(false); setShowInlineAdd(true); }}
-              >
-                <span className="group-hover:translate-x-1 inline-block transition-transform">
-                  + Add New Subcategory
-                </span>
-              </div>
-            )}
           </div>
         </>
       )}
