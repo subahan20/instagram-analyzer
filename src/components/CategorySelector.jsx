@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 
 const REQUIRED_CATEGORIES = [
-  'Top 10 Edutech Influencer',
-  'NewB - CollegeStudent',
-  'Marketing Solution',
+  'Top 10 Edutech Influencer - BuildWithSanny',
+  'NewB - CollegeStudent - AIWithSanny',
+  'Marketing Solution - Scalebysanny',
   'Top Edutech Brand',
-  'Foreign Educators in AI'
+  'Foreign Educators in AI + n8n WOrkFlow'
 ];
 
 export default function CategorySelector({ 
@@ -88,7 +88,7 @@ export default function CategorySelector({
             className="fixed inset-0 z-30" 
             onClick={() => setIsOpen(false)}
           ></div>
-          <div className="absolute top-full left-0 right-0 mt-3 z-40 bg-canvas border border-slate-200/50 dark:border-transparent rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-52 overflow-y-auto custom-scrollbar backdrop-blur-2xl">
+          <div className="absolute top-full left-0 min-w-full w-max max-w-[320px] sm:max-w-[450px] mt-3 z-40 bg-canvas border border-slate-200/50 dark:border-white/10 rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-80 overflow-y-auto custom-scrollbar backdrop-blur-2xl shadow-2xl">
             {showAllOption && (
               <div 
                 className="px-6 py-3.5 hover:bg-slate-50 dark:hover:bg-indigo-500/10 cursor-pointer text-sm font-bold text-secondary hover:text-primary transition-colors"

@@ -150,32 +150,18 @@ export default function InstagramSearch({ user, theme, setTheme }) {
                 </div>
               </div>
 
-              {/* Compact Categorization Row: Forced Side-by-Side Layout */}
-              <div className="flex flex-row items-center justify-center gap-2 sm:gap-4 w-full transition-all px-2">
-                <div className="flex-1 min-w-0">
+              {/* Unified Categorization Row: Full Width for Long Labels */}
+              <div className="flex flex-row items-center justify-center w-full transition-all px-2">
+                <div className="w-full">
                   <CategorySelector 
                     selectedCategory={category}
                     onCategoryChange={(cat) => {
                       setCategory(cat);
-                      setSubcategory({ name: 'All Subcategories', id: null });
                     }}
                     showAllOption={true}
-                    className="px-3 sm:px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest outline-none cursor-pointer glass hover:border-indigo-500/30 transition-all flex items-center text-secondary w-full"
+                    className="px-3 sm:px-6 py-3.5 rounded-2xl text-[10px] sm:text-xs font-bold uppercase tracking-widest outline-none cursor-pointer glass hover:border-indigo-500/30 transition-all flex items-center text-secondary w-full"
                   />
                 </div>
-                
-                {category?.id && (
-                  <div className="flex-1 min-w-0">
-                    <SubcategorySelector 
-                      categoryId={category.id}
-                      categoryName={category.name}
-                      selectedSubcategory={subcategory}
-                      onSubcategoryChange={setSubcategory}
-                      showAllOption={true}
-                      className="px-3 sm:px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest outline-none cursor-pointer glass hover:border-indigo-500/30 transition-all flex items-center text-secondary w-full"
-                    />
-                  </div>
-                )}
               </div>
             </div>
 
